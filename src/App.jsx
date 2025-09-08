@@ -42,22 +42,20 @@ function useQueryParam(key) {
   return value;
 }
 
-// --- Helper to force file download ---
-async function forceDownload(url, filename = "download") {
+/** Build a fast, native download URL:
+ *  - Uses Supabase Storage's `?download=filename` param so the browser saves directly.
+ *  - Works even if the src already has query params.
+ *  - Falls back gracefully if URL parsing fails.
+ */
+function buildDownloadUrl(src, filename = "download") {
   try {
-    const res = await fetch(url, { mode: "cors" });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const blob = await res.blob();
-    const objectUrl = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = objectUrl;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(objectUrl);
-  } catch (err) {
-    alert(`Download failed: ${err.message}`);
+    const u = new URL(src);
+    u.searchParams.set("download", filename);
+    return u.toString();
+  } catch {
+    // If src isn't absolute (unlikely for Supabase), append safely
+    const sep = src.includes("?") ? "&" : "?";
+    return `${src}${sep}download=${encodeURIComponent(filename)}`;
   }
 }
 
@@ -143,29 +141,33 @@ function Gallery({ items, onOpen }) {
   return (
     <div className="max-w-6xl mx-auto px-2 sm:px-4 pb-16">
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3">
-        {items.map((item) => (
-          <article key={item.id} className="group rounded-2xl overflow-hidden border border-white/10 bg-white/5">
-            <button onClick={() => onOpen(item)} className="block w-full aspect-[9/16] bg-black">
-              <img src={item.src} alt={item.title} loading="lazy" className="w-full h-full object-cover group-hover:opacity-90 transition" />
-            </button>
-            <div className="p-3 text-white">
-              <h3 className="text-sm font-semibold line-clamp-2">{item.title}</h3>
-              <div className="mt-2 flex items-center justify-between">
-                <button
-                  onClick={() => forceDownload(item.src, item.filename || `${item.title}.jpg`)}
-                  className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20"
-                >
-                  <Download className="h-3.5 w-3.5" /> Download
-                </button>
-                {item.tiktokUrl && (
-                  <a href={item.tiktokUrl} target="_blank" rel="noreferrer" className="text-xs text-white/70 hover:text-white inline-flex items-center gap-1">
-                    TikTok <ChevronRight className="h-3 w-3" />
+        {items.map((item) => {
+          const filename = item.filename || `${item.title}.jpg`;
+          const downloadHref = buildDownloadUrl(item.src, filename);
+          return (
+            <article key={item.id} className="group rounded-2xl overflow-hidden border border-white/10 bg-white/5">
+              <button onClick={() => onOpen(item)} className="block w-full aspect-[9/16] bg-black">
+                <img src={item.src} alt={item.title} loading="lazy" className="w-full h-full object-cover group-hover:opacity-90 transition" />
+              </button>
+              <div className="p-3 text-white">
+                <h3 className="text-sm font-semibold line-clamp-2">{item.title}</h3>
+                <div className="mt-2 flex items-center justify-between">
+                  <a
+                    href={downloadHref}
+                    className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20"
+                  >
+                    <Download className="h-3.5 w-3.5" /> Download
                   </a>
-                )}
+                  {item.tiktokUrl && (
+                    <a href={item.tiktokUrl} target="_blank" rel="noreferrer" className="text-xs text-white/70 hover:text-white inline-flex items-center gap-1">
+                      TikTok <ChevronRight className="h-3 w-3" />
+                    </a>
+                  )}
+                </div>
               </div>
-            </div>
-          </article>
-        ))}
+            </article>
+          );
+        })}
       </div>
     </div>
   );
@@ -179,6 +181,10 @@ function Modal({ open, onClose, item }) {
   }, [open, onClose]);
   useEffect(() => { if (open && closeBtnRef.current) closeBtnRef.current.focus(); }, [open]);
   if (!open || !item) return null;
+
+  const filename = item?.filename || `${item?.title || "download"}.jpg`;
+  const downloadHref = item ? buildDownloadUrl(item.src, filename) : "#";
+
   return (
     <div className="fixed inset-0 z-50" aria-modal="true" role="dialog">
       <div className="absolute inset-0 bg-black/70" onClick={onClose} />
@@ -194,12 +200,12 @@ function Modal({ open, onClose, item }) {
           <div className="px-4 py-3 border-t border-white/10 bg-black/30 sticky bottom-0 z-10 flex flex-wrap gap-2 items-center justify-between">
             <div className="text-white/80 text-sm font-medium line-clamp-1 pr-2">{item.title}</div>
             <div className="flex gap-2">
-              <button
-                onClick={() => forceDownload(item.src, item.filename || `${item.title}.jpg`)}
+              <a
+                href={downloadHref}
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white text-black"
               >
                 <Download className="h-4 w-4" /> Download
-              </button>
+              </a>
               {item.tiktokUrl && (
                 <a href={item.tiktokUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 text-white hover:bg-white/20">Open TikTok <ArrowUpRight className="h-4 w-4" /></a>
               )}
