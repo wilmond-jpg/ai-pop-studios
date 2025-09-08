@@ -392,31 +392,44 @@
       const card = document.createElement('div');
       card.className = 'border rounded-xl p-4 shadow-sm flex flex-col gap-3';
 
+      // Image
       const img = document.createElement('img');
       img.src = item.src;
       img.alt = item.title || item.filename;
       img.className = 'w-full h-48 object-cover rounded-lg';
       img.loading = 'lazy';
 
+      // Filename line (single-line clamp)
       const pathInfo = document.createElement('div');
-      pathInfo.className = 'text-xs text-slate-500 break-all';
+      pathInfo.className = 'text-xs text-slate-500 clamp-1';  // <— changed
+      pathInfo.title = item.filename || '';                   // hover to see full
       pathInfo.textContent = item.filename || '(no filename)';
 
+      // Inputs
       const titleI = input('Title', item.title || '', 'title');
       const groupI = selectGroup(item.group || 'Other');
       const tagsI  = input('Tags (comma-separated)', (item.tags || []).join(', '), 'tags');
       const dateI  = input('Date (YYYY-MM-DD)', item.date || '', 'date', 'date');
       const ttokI  = input('TikTok URL', item.tiktokUrl || '', 'tiktokUrl');
 
+      // Make inputs/selects respect card width
+      titleI.input.className  += ' w-full min-w-0';
+      tagsI.input.className   += ' w-full min-w-0';
+      dateI.input.className   += ' w-full min-w-0';
+      ttokI.input.className   += ' w-full min-w-0';
+      groupI.select.className += ' w-full min-w-0 pr-8';  // ensure room for arrow
+
+      // Quick visual tag chips (also clamp to 2 lines)
       const tagList = document.createElement('div');
-      tagList.className = 'flex flex-wrap gap-1 -mt-1';
+      tagList.className = 'flex flex-wrap gap-1 -mt-1 clamp-2';
       (item.tags || []).forEach(t => {
         const chip = document.createElement('span');
-        chip.className = 'chip';
+        chip.className = 'inline-flex items-center rounded-full px-2 py-0.5 text-xs bg-slate-100';
         chip.textContent = t;
         tagList.appendChild(chip);
       });
 
+      // Actions
       const btnSave = buttonPrimary('Save', async () => {
         const updates = {
           title: titleI.input.value.trim() || null,
@@ -433,14 +446,13 @@
       });
 
       const replaceWrap = document.createElement('label');
-      replaceWrap.className = 'btn btn-muted cursor-pointer';
-      replaceWrap.textContent = 'Replace image';
+      replaceWrap.className = 'px-3 py-2 rounded-xl bg-slate-200 text-slate-800 cursor-pointer';
+      replaceWrap.textContent = 'Replace';
       const replaceInput = document.createElement('input');
       replaceInput.type = 'file';
       replaceInput.accept = 'image/*';
       replaceInput.className = 'hidden';
       replaceWrap.appendChild(replaceInput);
-
       replaceInput.addEventListener('change', async (e) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -448,7 +460,7 @@
       });
 
       const btnDelete = document.createElement('button');
-      btnDelete.className = 'btn btn-danger';
+      btnDelete.className = 'px-3 py-2 rounded-xl border text-red-600 border-red-300';
       btnDelete.textContent = 'Delete';
       btnDelete.addEventListener('click', async () => {
         if (!confirm('Delete this post from storage and database?')) return;
@@ -456,29 +468,35 @@
         await deletePost(item);
       });
 
+      // Top row with IDs / badges and actions
       const row1 = document.createElement('div');
-      row1.className = 'flex items-center justify-between gap-2';
+      row1.className = 'flex flex-wrap items-center justify-between gap-2';
+
       const left = document.createElement('div');
-      left.className = 'flex items-center gap-2';
+      left.className = 'flex items-center gap-2 min-w-0'; // <— min-w-0 lets the chips truncate
+
       const idBadge = document.createElement('span');
-      idBadge.className = 'chip';
+      idBadge.className = 'inline-flex items-center rounded-full px-2 py-0.5 text-xs bg-slate-100 clamp-1';
+      idBadge.title = item.id;
       idBadge.textContent = `#${item.id}`;
+
       const groupBadge = document.createElement('span');
-      groupBadge.className = 'chip';
+      groupBadge.className = 'inline-flex items-center rounded-full px-2 py-0.5 text-xs bg-slate-100';
       groupBadge.textContent = item.group || 'Other';
+
       left.append(idBadge, groupBadge);
 
       const right = document.createElement('div');
-      right.className = 'flex items-center gap-2';
+      right.className = 'flex items-center gap-2 flex-shrink-0'; // <— actions don’t wrap weirdly
       right.append(btnSave, replaceWrap, btnDelete);
 
       row1.append(left, right);
 
+      // Assemble card
       card.append(img, pathInfo, titleI.wrap, groupI.wrap, tagsI.wrap, tagList, dateI.wrap, ttokI.wrap, row1);
       rowsEl.appendChild(card);
     }
   }
-
   function input(label, value, name, type='text') {
     const wrap = document.createElement('label');
     wrap.className = 'text-sm w-full block';
