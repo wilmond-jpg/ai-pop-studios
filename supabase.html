@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AdoboAI – Uploader</title>
+  <!-- Tailwind (CDN) for quick styling) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Supabase JS v2 -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    .dropzone { border: 2px dashed #cbd5e1; border-radius: 1rem; }
+    .dropzone.dragover { border-color: #0ea5e9; background: #f0f9ff; }
+    .hidden { display: none; }
+    .preview img { max-height: 240px; }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-50">
+  <div class="max-w-3xl mx-auto px-4 py-8">
+    <header class="mb-6 flex items-center justify-between">
+      <h1 class="text-2xl font-bold">AdoboAI – Self‑Hosted Uploader</h1>
+      <div class="flex items-center gap-2">
+        <span id="authStatus" class="text-sm text-slate-600">Not signed in</span>
+        <button id="btnSignIn" class="px-3 py-1.5 rounded-xl bg-black text-white text-sm">Sign in with Google</button>
+        <button id="btnSignOut" class="px-3 py-1.5 rounded-xl bg-slate-200 text-slate-800 text-sm hidden">Sign out</button>
+      </div>
+    </header>
+
+    <!-- Guarded notice -->
+    <div id="guard" class="mb-6 hidden">
+      <div class="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-900">
+        <p class="font-semibold">Access restricted</p>
+        <p class="text-sm">Only <span class="font-mono" id="ownerEmail_label"></span> can upload here. Please sign in with that Google account.</p>
+      </div>
+    </div>
+
+    <!-- Upload Card -->
+    <section id="uploader" class="rounded-2xl bg-white shadow p-5 hidden">
+      <form id="form" class="space-y-5">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium">Title</label>
+            <input id="title" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" placeholder="e.g., Pablo Neon Wallpaper" required />
+          </div>
+          <div>
+            <label class="block text-sm font-medium">Group</label>
+            <select id="group" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" required>
+              <option value="SB19">SB19</option>
+              <option value="BINI">BINI</option>
+              <option value="PPop">PPop</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium">Tags (comma-separated)</label>
+            <input id="tags" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" placeholder="anime, wallpaper, neon" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium">TikTok URL (optional)</label>
+            <input id="tiktokUrl" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" placeholder="https://www.tiktok.com/@adoboai/video/…" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-sm font-medium">Date</label>
+            <input id="date" type="date" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" required />
+          </div>
+          <div>
+            <label class="block text-sm font-medium">Folder (optional)</label>
+            <input id="folder" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" placeholder="wallpapers" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium">File name (optional)</label>
+            <input id="filename" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" placeholder="pablo-neon.png" />
+          </div>
+        </div>
+
+        <div id="dz" class="dropzone p-6 text-center">
+          <p class="text-slate-600">Drag & drop image here, or click to choose</p>
+          <input id="fileInput" type="file" accept="image/*" class="hidden" />
+        </div>
+
+        <div id="preview" class="preview hidden mt-2"></div>
+
+        <div class="flex items-center gap-3">
+          <button id="btnUpload" class="px-4 py-2 rounded-xl bg-emerald-600 text-white disabled:opacity-50" disabled>Upload</button>
+          <span id="status" class="text-sm text-slate-600"></span>
+        </div>
+      </form>
+
+      <div id="result" class="mt-6 hidden">
+        <div class="rounded-xl border border-slate-200 p-4">
+          <p class="font-semibold">Uploaded!</p>
+          <p class="text-sm break-all">Public URL: <a id="publicUrl" href="#" target="_blank" class="text-sky-600 underline"></a></p>
+          <p class="text-sm">DB Row ID: <span id="rowId" class="font-mono"></span></p>
+        </div>
+      </div>
+    </section>
+
+    <footer class="mt-10 text-center text-xs text-slate-500">
+      Only the owner email can upload. All files go to bucket <span class="font-mono">drops-public</span>.
+    </footer>
+  </div>
+
+<script>
+  // =========================
+  // 1) CONFIG – CHANGE THESE
+  // =========================
+  const SUPABASE_URL = "https://YOUR_PROJECT_REF.supabase.co"; // e.g. https://abcxyz.supabase.co
+  const SUPABASE_ANON_KEY = "YOUR_PUBLIC_ANON_KEY";            // from Project Settings → API
+  const OWNER_EMAIL = "wilmondraylybarut19@gmail.com";          // the only allowed uploader
+  const BUCKET = "drops-public";                                 // storage bucket name
+
+  // =========================
+  // 2) INIT
+  // =========================
+  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  const authStatus = document.getElementById('authStatus');
+  const btnSignIn  = document.getElementById('btnSignIn');
+  const btnSignOut = document.getElementById('btnSignOut');
+  const uploader   = document.getElementById('uploader');
+  const guard      = document.getElementById('guard');
+  const ownerEmailLabel = document.getElementById('ownerEmail_label');
+  ownerEmailLabel.textContent = OWNER_EMAIL;
+
+  const titleEl    = document.getElementById('title');
+  const groupEl    = document.getElementById('group');
+  const tagsEl     = document.getElementById('tags');
+  const tiktokEl   = document.getElementById('tiktokUrl');
+  const dateEl     = document.getElementById('date');
+  const folderEl   = document.getElementById('folder');
+  const fileNameEl = document.getElementById('filename');
+  const dz         = document.getElementById('dz');
+  const fileInput  = document.getElementById('fileInput');
+  const preview    = document.getElementById('preview');
+  const btnUpload  = document.getElementById('btnUpload');
+  const statusEl   = document.getElementById('status');
+  const resultBox  = document.getElementById('result');
+  const publicUrlA = document.getElementById('publicUrl');
+  const rowIdSpan  = document.getElementById('rowId');
+
+  // default date = today (Asia/Manila assumed; using local)
+  dateEl.valueAsDate = new Date();
+
+  // =========================
+  // 3) AUTH HELPERS
+  // =========================
+  async function refreshAuth() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      authStatus.textContent = `Signed in as ${user.email}`;
+      btnSignIn.classList.add('hidden');
+      btnSignOut.classList.remove('hidden');
+      if (user.email?.toLowerCase() === OWNER_EMAIL.toLowerCase()) {
+        uploader.classList.remove('hidden');
+        guard.classList.add('hidden');
+      } else {
+        uploader.classList.add('hidden');
+        guard.classList.remove('hidden');
+      }
+    } else {
+      authStatus.textContent = 'Not signed in';
+      btnSignIn.classList.remove('hidden');
+      btnSignOut.classList.add('hidden');
+      uploader.classList.add('hidden');
+      guard.classList.remove('hidden');
+    }
+  }
+
+  btnSignIn.addEventListener('click', async () => {
+    const redirectTo = window.location.origin + window.location.pathname; // same page
+    const { data, error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo } });
+    if (error) alert('Sign-in error: ' + error.message);
+  });
+
+  btnSignOut.addEventListener('click', async () => {
+    await supabase.auth.signOut();
+    await refreshAuth();
+  });
+
+  // listen to auth changes
+  supabase.auth.onAuthStateChange((_event, _session) => {
+    refreshAuth();
+  });
+
+  refreshAuth();
+
+  // =========================
+  // 4) DRAG & DROP / FILE SELECT
+  // =========================
+  dz.addEventListener('click', () => fileInput.click());
+  dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.classList.add('dragover'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+  dz.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dz.classList.remove('dragover');
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      fileInput.files = e.dataTransfer.files;
+      showPreview();
+    }
+  });
+
+  fileInput.addEventListener('change', showPreview);
+
+  function showPreview() {
+    const f = fileInput.files?.[0];
+    preview.innerHTML = '';
+    if (!f) { preview.classList.add('hidden'); btnUpload.disabled = true; return; }
+    const img = document.createElement('img');
+    img.className = 'rounded-xl';
+    img.src = URL.createObjectURL(f);
+    preview.appendChild(img);
+    preview.classList.remove('hidden');
+    btnUpload.disabled = false;
+  }
+
+  // =========================
+  // 5) UPLOAD + DB INSERT
+  // =========================
+  function slugifyFilename(name) {
+    return name.toLowerCase().replace(/[^a-z0-9._-]+/g, '-')
+               .replace(/-+/g, '-')
+               .replace(/^-|-$/g, '');
+  }
+
+  async function uploadAndInsert(ev) {
+    ev.preventDefault();
+    statusEl.textContent = '';
+    resultBox.classList.add('hidden');
+
+    const file = fileInput.files?.[0];
+    if (!file) { alert('Please choose an image'); return; }
+
+    // Build filename
+    const ext = file.name.split('.').pop()?.toLowerCase() || 'png';
+    const desiredName = fileNameEl.value.trim();
+    const baseName = desiredName ? desiredName.replace(/\.[^.]+$/, '') : file.name.replace(/\.[^.]+$/, '');
+    const safeBase = slugifyFilename(baseName) || 'image';
+    const stamp = Date.now();
+    const finalName = `${safeBase}-${stamp}.${ext}`;
+
+    const folder = folderEl.value.trim() ? folderEl.value.trim().replace(/^\/+|\/+$/g, '') + '/' : '';
+    const objectPath = folder + finalName;
+
+    btnUpload.disabled = true;
+    statusEl.textContent = 'Uploading to Storage…';
+
+    // 1) Upload to Storage (RLS will allow only owner email)
+    const { error: upErr } = await supabase.storage.from(BUCKET).upload(objectPath, file, { upsert: false });
+    if (upErr) {
+      btnUpload.disabled = false;
+      statusEl.textContent = '';
+      alert('Upload error: ' + upErr.message);
+      return;
+    }
+
+    // Build public URL
+    const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${objectPath}`;
+
+    statusEl.textContent = 'Saving record to database…';
+
+    // 2) Insert DB row into public.drops
+    const title = titleEl.value.trim();
+    const group = groupEl.value;
+    const tags = (tagsEl.value || '').split(',').map(t => t.trim()).filter(Boolean);
+    const tiktokUrl = tiktokEl.value.trim() || null;
+    const dateStr = dateEl.value; // YYYY-MM-DD
+
+    const { data: insertData, error: dbErr } = await supabase
+      .from('drops')
+      .insert([
+        {
+          title,
+          group,
+          tags,
+          src: publicUrl,
+          filename: finalName,
+          date: dateStr,
+          tiktokUrl
+        }
+      ])
+      .select('id')
+      .single();
+
+    if (dbErr) {
+      btnUpload.disabled = false;
+      statusEl.textContent = '';
+      alert('DB insert error: ' + dbErr.message + '\n(Your image was uploaded; only the DB row failed)');
+      return;
+    }
+
+    // Done
+    statusEl.textContent = 'Done!';
+    publicUrlA.href = publicUrl;
+    publicUrlA.textContent = publicUrl;
+    rowIdSpan.textContent = insertData.id;
+    resultBox.classList.remove('hidden');
+    btnUpload.disabled = false;
+  }
+
+  document.getElementById('form').addEventListener('submit', uploadAndInsert);
+</script>
+</body>
+</html>
