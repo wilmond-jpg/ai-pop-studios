@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>AdoboAI – Uploader</title>
-  <!-- Tailwind (CDN) for quick styling) -->
+  <!-- Tailwind (CDN) -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Supabase JS v2 -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -13,11 +13,14 @@
     .dropzone.dragover { border-color: #0ea5e9; background: #f0f9ff; }
     .hidden { display: none; }
     .preview img { max-height: 240px; }
-    .btn { @apply px-3 py-2 rounded-xl; }
-    .btn-primary { @apply bg-black text-white; }
-    .btn-muted { @apply bg-slate-200 text-slate-800; }
-    .btn-danger { @apply border border-red-300 text-red-600; }
-    .chip { @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs bg-slate-100; }
+
+    /* ——— NEW: overflow helpers ——— */
+    .min-w-0 { min-width: 0; }                 /* allow children to truncate */
+    .clamp-1 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .clamp-2 {
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
   </style>
 </head>
 <body class="min-h-screen bg-slate-50">
