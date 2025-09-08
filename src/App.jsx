@@ -99,56 +99,46 @@ function buildDownloadUrl(src, filename = "download") {
 /* -------------------------------------------------------
    Progressive Image (fast perceived load)
 ------------------------------------------------------- */
-function ProgressiveImg({ src, alt = "", className = "w-full h-full object-cover", previewSrc }) {
+function ProgressiveImg({ src, alt = "", className = "" , previewSrc }) {
   const [loaded, setLoaded] = useState(false);
   const [hasPreviewError, setHasPreviewError] = useState(false);
 
-  // Preload the full image (decode for smoother swap)
+  // Preload full image then fade in
   useEffect(() => {
     let ok = true;
     const img = new Image();
     img.src = src;
     const settle = () => ok && setLoaded(true);
     img.decode?.().then(settle).catch(settle);
-    return () => {
-      ok = false;
-    };
+    return () => { ok = false; };
   }, [src]);
 
+  // If you didn't enable Supabase image transforms, this will just equal src (fine)
   const preview = previewSrc || buildPreviewUrl(src, { width: 96, quality: 30 });
 
   return (
-    <div className="relative overflow-hidden">
-      {/* Blurred tiny preview underneath */}
+    // IMPORTANT: the wrapper must fill its parent (w-full h-full) and be relative
+    <div className={`relative w-full h-full overflow-hidden ${className}`}>
+      {/* Blurred tiny preview UNDERNEATH, absolutely positioned */}
       <img
         src={preview}
         alt=""
         aria-hidden="true"
-        className={classNames(
-          className,
-          "blur-xl scale-110 transition-opacity duration-300",
-          loaded || hasPreviewError ? "opacity-0" : "opacity-100"
-        )}
+        className={`absolute inset-0 w-full h-full object-cover blur-xl scale-110 transition-opacity duration-300 ${loaded || hasPreviewError ? "opacity-0" : "opacity-100"}`}
         onError={() => setHasPreviewError(true)}
         loading="eager"
         decoding="async"
       />
-      {/* Real image on top, fades in */}
+      {/* Real image ON TOP, absolutely positioned */}
       <img
         src={src}
         alt={alt}
-        className={classNames(
-          className,
-          "absolute inset-0 transition-opacity duration-300",
-          loaded ? "opacity-100" : "opacity-0"
-        )}
+        className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${loaded ? "opacity-100" : "opacity-0"}`}
         loading="lazy"
         decoding="async"
       />
-      {/* Skeleton shimmer while both are not ready (rare) */}
-      {!loaded && (
-        <div className="absolute inset-0 animate-pulse bg-neutral-900/40" />
-      )}
+      {/* Optional skeleton while both aren't ready */}
+      {!loaded && <div className="absolute inset-0 animate-pulse bg-neutral-900/40" />}
     </div>
   );
 }
