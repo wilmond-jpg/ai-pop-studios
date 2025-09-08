@@ -13,16 +13,21 @@
     .dropzone.dragover { border-color: #0ea5e9; background: #f0f9ff; }
     .hidden { display: none; }
     .preview img { max-height: 240px; }
+    .btn { @apply px-3 py-2 rounded-xl; }
+    .btn-primary { @apply bg-black text-white; }
+    .btn-muted { @apply bg-slate-200 text-slate-800; }
+    .btn-danger { @apply border border-red-300 text-red-600; }
+    .chip { @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs bg-slate-100; }
   </style>
 </head>
 <body class="min-h-screen bg-slate-50">
-  <div class="max-w-3xl mx-auto px-4 py-8">
+  <div class="max-w-5xl mx-auto px-4 py-8">
     <header class="mb-6 flex items-center justify-between">
-      <h1 class="text-2xl font-bold">AdoboAI – Self‑Hosted Uploader</h1>
+      <h1 class="text-2xl font-bold">AdoboAI – Self-Hosted Uploader</h1>
       <div class="flex items-center gap-2">
         <span id="authStatus" class="text-sm text-slate-600">Not signed in</span>
-        <button id="btnSignIn" class="px-3 py-1.5 rounded-xl bg-black text-white text-sm">Sign in with Google</button>
-        <button id="btnSignOut" class="px-3 py-1.5 rounded-xl bg-slate-200 text-slate-800 text-sm hidden">Sign out</button>
+        <button id="btnSignIn" class="btn btn-primary text-sm">Sign in with Google</button>
+        <button id="btnSignOut" class="btn btn-muted text-sm hidden">Sign out</button>
       </div>
     </header>
 
@@ -30,7 +35,7 @@
     <div id="guard" class="mb-6 hidden">
       <div class="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-900">
         <p class="font-semibold">Access restricted</p>
-        <p class="text-sm">Only <span class="font-mono" id="ownerEmail_label"></span> can upload here. Please sign in with that Google account.</p>
+        <p class="text-sm">Only <span class="font-mono" id="ownerEmail_label"></span> can access this page. Please sign in with that Google account.</p>
       </div>
     </div>
 
@@ -87,7 +92,7 @@
         <div id="preview" class="preview hidden mt-2"></div>
 
         <div class="flex items-center gap-3">
-          <button id="btnUpload" class="px-4 py-2 rounded-xl bg-emerald-600 text-white disabled:opacity-50" disabled>Upload</button>
+          <button id="btnUpload" class="btn btn-primary disabled:opacity-50" disabled>Upload</button>
           <span id="status" class="text-sm text-slate-600"></span>
         </div>
       </form>
@@ -101,8 +106,30 @@
       </div>
     </section>
 
+    <!-- =========================
+         MANAGER: list / edit / replace / delete
+         ========================= -->
+    <section id="manager" class="rounded-2xl bg-white shadow p-5 mt-8 hidden">
+      <div class="mb-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+        <h2 class="text-xl font-semibold">Manage Posts</h2>
+        <div class="flex items-center gap-2">
+          <input id="searchInput" class="rounded-xl border border-slate-300 px-3 py-2" placeholder="Search title, group, or filename…" />
+          <button id="btnSearch" class="btn btn-muted">Search</button>
+          <button id="btnClear" class="btn btn-muted">Clear</button>
+        </div>
+      </div>
+
+      <div id="rows" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+
+      <div class="flex items-center justify-center gap-2 mt-6">
+        <button id="btnPrev" class="btn btn-muted">Prev</button>
+        <span id="pageLabel" class="text-sm"></span>
+        <button id="btnNext" class="btn btn-muted">Next</button>
+      </div>
+    </section>
+
     <footer class="mt-10 text-center text-xs text-slate-500">
-      Only the owner email can upload. All files go to bucket <span class="font-mono">drops-public</span>.
+      Owner-only access. Files go to bucket <span class="font-mono">drops-public</span>.
     </footer>
   </div>
 
@@ -110,10 +137,11 @@
   // =========================
   // 1) CONFIG – CHANGE THESE
   // =========================
-  const SUPABASE_URL = "https://erixoghrziqcbamahocs.supabase.co"; // e.g. https://abcxyz.supabase.co
-  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVyaXhvZ2hyemlxY2JhbWFob2NzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYyNzExNzYsImV4cCI6MjA3MTg0NzE3Nn0.Lak0VW5uzkEStS8RpVDuZ2Q8NirHzJv1O5ZWjHtwOQI";            // from Project Settings → API
-  const OWNER_EMAIL = "wilmondraylybarut19@gmail.com";          // the only allowed uploader
-  const BUCKET = "drops-public";                                 // storage bucket name
+  const SUPABASE_URL = "https://erixoghrziqcbamahocs.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVyaXhvZ2hyemlxY2JhbWFob2NzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYyNzExNzYsImV4cCI6MjA3MTg0NzE3Nn0.Lak0VW5uzkEStS8RpVDuZ2Q8NirHzJv1O5ZWjHtwOQI";
+  const OWNER_EMAIL = "wilmondraylybarut19@gmail.com";
+  const BUCKET = "drops-public";
+  const PAGE_SIZE = 18;
 
   // =========================
   // 2) INIT
@@ -124,6 +152,7 @@
   const btnSignIn  = document.getElementById('btnSignIn');
   const btnSignOut = document.getElementById('btnSignOut');
   const uploader   = document.getElementById('uploader');
+  const manager    = document.getElementById('manager');
   const guard      = document.getElementById('guard');
   const ownerEmailLabel = document.getElementById('ownerEmail_label');
   ownerEmailLabel.textContent = OWNER_EMAIL;
@@ -144,7 +173,15 @@
   const publicUrlA = document.getElementById('publicUrl');
   const rowIdSpan  = document.getElementById('rowId');
 
-  // default date = today (Asia/Manila assumed; using local)
+  const rowsEl     = document.getElementById('rows');
+  const btnPrev    = document.getElementById('btnPrev');
+  const btnNext    = document.getElementById('btnNext');
+  const pageLabel  = document.getElementById('pageLabel');
+  const searchInput= document.getElementById('searchInput');
+  const btnSearch  = document.getElementById('btnSearch');
+  const btnClear   = document.getElementById('btnClear');
+
+  // default date = today
   dateEl.valueAsDate = new Date();
 
   // =========================
@@ -158,9 +195,12 @@
       btnSignOut.classList.remove('hidden');
       if (user.email?.toLowerCase() === OWNER_EMAIL.toLowerCase()) {
         uploader.classList.remove('hidden');
+        manager.classList.remove('hidden');
         guard.classList.add('hidden');
+        await loadPage(0); // initial load
       } else {
         uploader.classList.add('hidden');
+        manager.classList.add('hidden');
         guard.classList.remove('hidden');
       }
     } else {
@@ -168,13 +208,14 @@
       btnSignIn.classList.remove('hidden');
       btnSignOut.classList.add('hidden');
       uploader.classList.add('hidden');
+      manager.classList.add('hidden');
       guard.classList.remove('hidden');
     }
   }
 
   btnSignIn.addEventListener('click', async () => {
-    const redirectTo = window.location.origin + window.location.pathname; // same page
-    const { data, error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo } });
+    const redirectTo = window.location.origin + window.location.pathname;
+    const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo } });
     if (error) alert('Sign-in error: ' + error.message);
   });
 
@@ -183,11 +224,7 @@
     await refreshAuth();
   });
 
-  // listen to auth changes
-  supabase.auth.onAuthStateChange((_event, _session) => {
-    refreshAuth();
-  });
-
+  supabase.auth.onAuthStateChange((_event, _session) => { refreshAuth(); });
   refreshAuth();
 
   // =========================
@@ -204,7 +241,6 @@
       showPreview();
     }
   });
-
   fileInput.addEventListener('change', showPreview);
 
   function showPreview() {
@@ -236,7 +272,6 @@
     const file = fileInput.files?.[0];
     if (!file) { alert('Please choose an image'); return; }
 
-    // Build filename
     const ext = file.name.split('.').pop()?.toLowerCase() || 'png';
     const desiredName = fileNameEl.value.trim();
     const baseName = desiredName ? desiredName.replace(/\.[^.]+$/, '') : file.name.replace(/\.[^.]+$/, '');
@@ -250,7 +285,6 @@
     btnUpload.disabled = true;
     statusEl.textContent = 'Uploading to Storage…';
 
-    // 1) Upload to Storage (RLS will allow only owner email)
     const { error: upErr } = await supabase.storage.from(BUCKET).upload(objectPath, file, { upsert: false });
     if (upErr) {
       btnUpload.disabled = false;
@@ -259,31 +293,19 @@
       return;
     }
 
-    // Build public URL
     const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${objectPath}`;
 
     statusEl.textContent = 'Saving record to database…';
 
-    // 2) Insert DB row into public.drops
     const title = titleEl.value.trim();
     const group = groupEl.value;
     const tags = (tagsEl.value || '').split(',').map(t => t.trim()).filter(Boolean);
     const tiktokUrl = tiktokEl.value.trim() || null;
-    const dateStr = dateEl.value; // YYYY-MM-DD
+    const dateStr = dateEl.value;
 
     const { data: insertData, error: dbErr } = await supabase
       .from('drops')
-      .insert([
-        {
-          title,
-          group,
-          tags,
-          src: publicUrl,
-          filename: finalName,
-          date: dateStr,
-          tiktokUrl
-        }
-      ])
+      .insert([{ title, group, tags, src: publicUrl, filename: finalName, date: dateStr, tiktokUrl }])
       .select('id')
       .single();
 
@@ -294,16 +316,249 @@
       return;
     }
 
-    // Done
     statusEl.textContent = 'Done!';
     publicUrlA.href = publicUrl;
     publicUrlA.textContent = publicUrl;
     rowIdSpan.textContent = insertData.id;
     resultBox.classList.remove('hidden');
     btnUpload.disabled = false;
+
+    await loadPage(0); // refresh manager to see newest first
   }
 
   document.getElementById('form').addEventListener('submit', uploadAndInsert);
+
+  // =========================
+  // 6) MANAGER (list/edit/replace/delete)
+  // =========================
+  let currentPage = 0;
+  let totalCount = 0;
+  let currentQuery = '';
+
+  btnSearch.addEventListener('click', () => loadPage(0, searchInput.value.trim()));
+  btnClear.addEventListener('click', () => { searchInput.value = ''; loadPage(0, ''); });
+
+  btnPrev.addEventListener('click', () => {
+    const p = Math.max(0, currentPage - 1);
+    loadPage(p, currentQuery);
+  });
+  btnNext.addEventListener('click', () => {
+    const maxP = Math.max(0, Math.ceil(totalCount / PAGE_SIZE) - 1);
+    const p = Math.min(maxP, currentPage + 1);
+    loadPage(p, currentQuery);
+  });
+
+  function buildQuery(base, q) {
+    if (!q) return base;
+    // search across title/group/filename/src
+    return base.or(`title.ilike.%${q}%,group.ilike.%${q}%,filename.ilike.%${q}%,src.ilike.%${q}%`);
+  }
+
+  async function loadPage(page = 0, q = '') {
+    currentPage = page;
+    currentQuery = q;
+
+    let query = supabase
+      .from('drops')
+      .select('id,title,group,tags,src,filename,date,tiktokUrl', { count: 'exact' })
+      .order('date', { ascending: false, nullsFirst: false })
+      .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+
+    query = buildQuery(query, q);
+
+    const { data, error, count } = await query;
+    if (error) {
+      console.error(error);
+      alert('Load error: ' + error.message);
+      return;
+    }
+
+    totalCount = count || 0;
+    pageLabel.textContent = `Page ${page + 1} / ${Math.max(1, Math.ceil(totalCount / PAGE_SIZE))}`;
+    renderRows(data || []);
+  }
+
+  function renderRows(items) {
+    rowsEl.innerHTML = '';
+    if (!items.length) {
+      rowsEl.innerHTML = `<div class="text-sm text-slate-500">No posts found.</div>`;
+      return;
+    }
+
+    for (const item of items) {
+      const card = document.createElement('div');
+      card.className = 'border rounded-xl p-4 shadow-sm flex flex-col gap-3';
+
+      const img = document.createElement('img');
+      img.src = item.src;
+      img.alt = item.title || item.filename;
+      img.className = 'w-full h-48 object-cover rounded-lg';
+      img.loading = 'lazy';
+
+      const pathInfo = document.createElement('div');
+      pathInfo.className = 'text-xs text-slate-500 break-all';
+      pathInfo.textContent = item.filename || '(no filename)';
+
+      const titleI = input('Title', item.title || '', 'title');
+      const groupI = selectGroup(item.group || 'Other');
+      const tagsI  = input('Tags (comma-separated)', (item.tags || []).join(', '), 'tags');
+      const dateI  = input('Date (YYYY-MM-DD)', item.date || '', 'date', 'date');
+      const ttokI  = input('TikTok URL', item.tiktokUrl || '', 'tiktokUrl');
+
+      const tagList = document.createElement('div');
+      tagList.className = 'flex flex-wrap gap-1 -mt-1';
+      (item.tags || []).forEach(t => {
+        const chip = document.createElement('span');
+        chip.className = 'chip';
+        chip.textContent = t;
+        tagList.appendChild(chip);
+      });
+
+      const btnSave = buttonPrimary('Save', async () => {
+        const updates = {
+          title: titleI.input.value.trim() || null,
+          group: groupI.select.value,
+          tags: tagsI.input.value.split(',').map(x=>x.trim()).filter(Boolean),
+          date: dateI.input.value || null,
+          tiktokUrl: ttokI.input.value.trim() || null
+        };
+        btnSave.disabled = true;
+        const { error } = await supabase.from('drops').update(updates).eq('id', item.id);
+        btnSave.disabled = false;
+        if (error) return alert('Update error: ' + error.message);
+        await loadPage(currentPage, currentQuery);
+      });
+
+      const replaceWrap = document.createElement('label');
+      replaceWrap.className = 'btn btn-muted cursor-pointer';
+      replaceWrap.textContent = 'Replace image';
+      const replaceInput = document.createElement('input');
+      replaceInput.type = 'file';
+      replaceInput.accept = 'image/*';
+      replaceInput.className = 'hidden';
+      replaceWrap.appendChild(replaceInput);
+
+      replaceInput.addEventListener('change', async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        await replaceImage(item, file);
+      });
+
+      const btnDelete = document.createElement('button');
+      btnDelete.className = 'btn btn-danger';
+      btnDelete.textContent = 'Delete';
+      btnDelete.addEventListener('click', async () => {
+        if (!confirm('Delete this post from storage and database?')) return;
+        if (!confirm('This cannot be undone. Proceed?')) return;
+        await deletePost(item);
+      });
+
+      const row1 = document.createElement('div');
+      row1.className = 'flex items-center justify-between gap-2';
+      const left = document.createElement('div');
+      left.className = 'flex items-center gap-2';
+      const idBadge = document.createElement('span');
+      idBadge.className = 'chip';
+      idBadge.textContent = `#${item.id}`;
+      const groupBadge = document.createElement('span');
+      groupBadge.className = 'chip';
+      groupBadge.textContent = item.group || 'Other';
+      left.append(idBadge, groupBadge);
+
+      const right = document.createElement('div');
+      right.className = 'flex items-center gap-2';
+      right.append(btnSave, replaceWrap, btnDelete);
+
+      row1.append(left, right);
+
+      card.append(img, pathInfo, titleI.wrap, groupI.wrap, tagsI.wrap, tagList, dateI.wrap, ttokI.wrap, row1);
+      rowsEl.appendChild(card);
+    }
+  }
+
+  function input(label, value, name, type='text') {
+    const wrap = document.createElement('label');
+    wrap.className = 'text-sm w-full block';
+    wrap.innerHTML = `<div class="font-medium">${label}</div>`;
+    const inp = document.createElement('input');
+    inp.type = type;
+    inp.value = value;
+    inp.className = 'mt-1 w-full rounded-xl border border-slate-300 px-3 py-2';
+    wrap.appendChild(inp);
+    return { wrap, input: inp, name };
+  }
+  function selectGroup(value) {
+    const wrap = document.createElement('label');
+    wrap.className = 'text-sm w-full block';
+    wrap.innerHTML = `<div class="font-medium">Group</div>`;
+    const sel = document.createElement('select');
+    sel.className = 'mt-1 w-full rounded-xl border border-slate-300 px-3 py-2';
+    ['SB19','BINI','PPop','Other'].forEach(opt => {
+      const o = document.createElement('option');
+      o.value = opt; o.textContent = opt;
+      if (opt === value) o.selected = true;
+      sel.appendChild(o);
+    });
+    wrap.appendChild(sel);
+    return { wrap, select: sel, name: 'group' };
+  }
+  function buttonPrimary(text, onClick) {
+    const b = document.createElement('button');
+    b.className = 'btn btn-primary';
+    b.textContent = text;
+    b.addEventListener('click', (e) => { e.preventDefault(); onClick?.(); });
+    return b;
+  }
+
+  // Derive object path (folder + filename) from a public URL
+  function getObjectPathFromPublicUrl(publicUrl) {
+    // expected: https://.../storage/v1/object/public/BUCKET/<objectPath>
+    const marker = `/storage/v1/object/public/${BUCKET}/`;
+    const idx = publicUrl.indexOf(marker);
+    if (idx === -1) return null;
+    return publicUrl.substring(idx + marker.length);
+  }
+
+  async function replaceImage(item, file) {
+    // keep folder if present in src
+    const oldPath = getObjectPathFromPublicUrl(item.src);
+    const folderPrefix = oldPath?.includes('/') ? oldPath.split('/').slice(0, -1).join('/') + '/' : '';
+    const ext = file.name.split('.').pop()?.toLowerCase() || 'png';
+    const base = (file.name.replace(/\.[^.]+$/, '') || 'image').toLowerCase().replace(/[^a-z0-9._-]+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'');
+    const stamp = Date.now();
+    const newFilename = `${base}-${stamp}.${ext}`;
+    const newPath = `${folderPrefix}${newFilename}`;
+
+    // 1) upload new object
+    const { error: upErr } = await supabase.storage.from(BUCKET).upload(newPath, file, { upsert: false });
+    if (upErr) return alert('Replace upload error: ' + upErr.message);
+
+    // 2) update DB src + filename
+    const newPublicUrl = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${newPath}`;
+    const { error: dbErr } = await supabase.from('drops').update({ src: newPublicUrl, filename: newFilename }).eq('id', item.id);
+    if (dbErr) return alert('DB update error: ' + dbErr.message);
+
+    // 3) remove old object (best effort)
+    if (oldPath) {
+      await supabase.storage.from(BUCKET).remove([oldPath]);
+    }
+
+    await loadPage(currentPage, currentQuery);
+  }
+
+  async function deletePost(item) {
+    const path = getObjectPathFromPublicUrl(item.src);
+    // delete storage first
+    if (path) {
+      const { error: sErr } = await supabase.storage.from(BUCKET).remove([path]);
+      if (sErr) return alert('Storage delete error: ' + sErr.message);
+    }
+    // then DB row
+    const { error: dErr } = await supabase.from('drops').delete().eq('id', item.id);
+    if (dErr) return alert('DB delete error: ' + dErr.message);
+
+    await loadPage(currentPage, currentQuery);
+  }
 </script>
 </body>
 </html>
