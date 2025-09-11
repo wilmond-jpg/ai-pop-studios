@@ -198,14 +198,17 @@ function DownloadButton({ url, filename = "image.png", label = "Download" }) {
 
   return (
     <button
-      onClick={handleDownload}
-      disabled={busy}
-      className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-60"
-      aria-busy={busy}
-    >
-      <Download className="h-3.5 w-3.5" />
-      {busy ? "Preparing…" : label}
-    </button>
+  onClick={handleDownload}
+  disabled={busy}
+  className="download-btn inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-60"
+  aria-busy={busy}
+  data-file={filename}   // 👈 filename Supabase gave us
+  data-url={url}         // 👈 original image URL
+>
+  <Download className="h-3.5 w-3.5" />
+  {busy ? "Preparing…" : label}
+</button>
+
   );
 }
 
