@@ -6,6 +6,7 @@ import {
   SlidersHorizontal,
   ChevronRight,
   ArrowUpRight,
+  ShoppingBag,
   Phone,
   LogIn,
   LogOut,
@@ -242,14 +243,25 @@ function Header() {
             </p>
           </div>
         </div>
-        <a
-          href="https://www.tiktok.com/@aipopstudios"
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-1 text-sm px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white"
-        >
-          Visit TikTok <ArrowUpRight className="h-4 w-4" />
-        </a>
+        <div className="flex items-center gap-2">
+          <a
+            href="https://aipopstudios.com/shop"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center justify-center rounded-xl bg-white/10 hover:bg-white/20 text-white p-2"
+          >
+            <ShoppingBag className="h-5 w-5" aria-hidden="true" />
+            <span className="sr-only">Visit Shop</span>
+          </a>
+          <a
+            href="https://www.tiktok.com/@aipopstudios"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 text-sm px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white"
+          >
+            Visit TikTok <ArrowUpRight className="h-4 w-4" />
+          </a>
+        </div>
       </div>
     </header>
   );
