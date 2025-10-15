@@ -6,7 +6,6 @@ import {
   SlidersHorizontal,
   ChevronRight,
   ArrowUpRight,
-  ShoppingBag,
   Phone,
   LogIn,
   LogOut,
@@ -248,10 +247,9 @@ function Header() {
             href="https://aipopstudios.com/shop"
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center justify-center rounded-xl bg-white/10 hover:bg-white/20 text-white p-2"
+            className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white"
           >
-            <ShoppingBag className="h-5 w-5" aria-hidden="true" />
-            <span className="sr-only">Visit Shop</span>
+            TikTok Shop
           </a>
           <a
             href="https://www.tiktok.com/@aipopstudios"
