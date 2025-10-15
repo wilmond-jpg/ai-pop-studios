@@ -1,5 +1,5 @@
 // src/App.jsx
-import React, { useMemo, useState, useEffect, useRef } from "react";
+import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import {
   Download,
   Search,
@@ -11,6 +11,7 @@ import {
   LogOut,
   Upload,
   X,
+  Shield,
 } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 
@@ -24,6 +25,7 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "";
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON || "";
 const SUPABASE_BUCKET = import.meta.env.VITE_SUPABASE_BUCKET || "drops-public";
 const ALLOWED_EMAIL = import.meta.env.VITE_ALLOWED_EMAIL || "";
+const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL || ALLOWED_EMAIL || "";
 
 const supa =
   SUPABASE_URL && SUPABASE_ANON ? createClient(SUPABASE_URL, SUPABASE_ANON) : null;
@@ -32,6 +34,12 @@ const GROUPS = ["All", "SB19", "BINI", "PPop", "Other"];
 
 function classNames(...s) {
   return s.filter(Boolean).join(" ");
+}
+
+function isAdminUser(user) {
+  if (!ADMIN_EMAIL) return false;
+  const email = user?.email || "";
+  return email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
 }
 
 function ShopGlyph({ className = "", ...props }) {
@@ -78,12 +86,15 @@ const SHOP_PRODUCTS = [
     blurb: "25 neon die-cut stickers celebrating SB19 & BINI biases in high-res PNG format.",
     price: "$6.50",
     url: "https://aipopstudios.com/shop?template=stickers",
+    downloadUrl: "",
     highlights: [
       "25 transparent PNG stickers at 2000px",
       "Printable 4×6 layout for Cricut/Silhouette",
       "Commercial mini-run license included",
     ],
     accent: "from-fuchsia-500 via-pink-500 to-amber-400",
+    ctaLabel: "View template",
+    ctaType: "external",
   },
   {
     id: "creator-badges",
@@ -91,12 +102,15 @@ const SHOP_PRODUCTS = [
     blurb: "Animated live supporter badges and shout-out frames ready for TikTok overlays.",
     price: "$9.00",
     url: "https://aipopstudios.com/shop?template=badges",
+    downloadUrl: "",
     highlights: [
       "12 animated badge templates (1080×1920)",
       "Editable Canva + layered PSD files",
       "Five colorway presets with typography guide",
     ],
     accent: "from-cyan-400 via-sky-500 to-purple-500",
+    ctaLabel: "View template",
+    ctaType: "external",
   },
   {
     id: "highlight-kit",
@@ -104,14 +118,52 @@ const SHOP_PRODUCTS = [
     blurb: "Cohesive Instagram highlight covers with matching wallpapers and gradient art.",
     price: "$7.50",
     url: "https://aipopstudios.com/shop?template=highlights",
+    downloadUrl: "",
     highlights: [
       "18 highlight cover PNGs + editable Canva file",
       "6 looping vertical story backgrounds",
       "Bonus lock-screen wallpaper trio",
     ],
     accent: "from-emerald-400 via-lime-400 to-teal-500",
+    ctaLabel: "View template",
+    ctaType: "external",
   },
 ];
+
+function parseHighlights(value) {
+  if (Array.isArray(value)) return value.map((v) => `${v}`.trim()).filter(Boolean);
+  if (!value) return [];
+  if (typeof value === "string") {
+    return value
+      .split(/\r?\n|,/)
+      .map((v) => v.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function normalizeShopItem(item) {
+  if (!item) return null;
+  const highlights = parseHighlights(item.highlights ?? item.highlights_text ?? item.highlights_raw);
+  const accent = item.accent || item.accent_class || "from-fuchsia-500 via-pink-500 to-amber-400";
+  const downloadUrl = item.download_url || item.file_url || item.asset_url || "";
+  const externalUrl = item.external_url || item.url || "";
+  const delivery = item.delivery || item.cta_type || (downloadUrl ? "download" : "external");
+  const ctaLabel = item.cta_label || (delivery === "download" ? "Download" : "View template");
+
+  return {
+    id: item.id || item.slug || `shop-${Date.now()}`,
+    name: item.name || item.title || "Untitled template",
+    blurb: item.blurb || item.description || "",
+    price: item.price || item.amount || "",
+    url: delivery === "external" ? externalUrl || downloadUrl : downloadUrl || externalUrl,
+    downloadUrl,
+    highlights,
+    accent,
+    ctaLabel,
+    ctaType: delivery,
+  };
+}
 
 /* -------------------------------------------------------
    URL helpers
@@ -294,9 +346,11 @@ function Header({
   onNavigateHome,
   onNavigateShop,
   onOpenAccount,
+  onOpenAdmin,
   onSignOut,
   activeView,
   user,
+  isAdmin,
 }) {
   const [logoOk, setLogoOk] = useState(true);
   const isShop = activeView === "shop";
@@ -344,6 +398,18 @@ function Header({
           >
             <ShopGlyph className="h-4 w-4" />
             <span className="font-medium">Shop</span>
+          </button>
+          <button
+            type="button"
+            onClick={onOpenAdmin}
+            className={classNames(
+              "inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-xl transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70",
+              isAdmin ? "bg-white text-black" : "bg-white/10 hover:bg-white/20 text-white"
+            )}
+            title="Open admin tools"
+          >
+            <Shield className="h-4 w-4" />
+            <span className="font-medium">Admin</span>
           </button>
           <a
             href="https://aipopstudios.com/shop"
@@ -416,7 +482,7 @@ function Hero() {
   );
 }
 
-function ShopPage({ onBackToHome }) {
+function ShopPage({ onBackToHome, products = SHOP_PRODUCTS }) {
   return (
     <section className="relative overflow-hidden">
       <div className="absolute inset-0 bg-[radial-gradient(80%_60%_at_20%_0%,rgba(34,211,238,0.14),transparent),radial-gradient(70%_55%_at_80%_10%,rgba(236,72,153,0.18),transparent)]" />
@@ -465,7 +531,19 @@ function ShopPage({ onBackToHome }) {
         </div>
 
         <div className="mt-12 grid gap-6 md:grid-cols-3">
-          {SHOP_PRODUCTS.map((product) => (
+          {products.map((product) => {
+            const actionUrl =
+              product.ctaType === "download"
+                ? product.downloadUrl || product.url
+                : product.url || product.downloadUrl;
+            const isDownload = product.ctaType === "download";
+            const label = product.ctaLabel || (isDownload ? "Download" : "View template");
+            const Icon = isDownload ? Download : ArrowUpRight;
+            const disabled = !actionUrl;
+            const highlights = Array.isArray(product.highlights)
+              ? product.highlights
+              : parseHighlights(product.highlights);
+            return (
             <article
               key={product.id}
               className="relative rounded-3xl border border-white/10 bg-white/5 overflow-hidden flex flex-col"
@@ -479,8 +557,8 @@ function ShopPage({ onBackToHome }) {
                   <h3 className="text-lg font-semibold text-white">{product.name}</h3>
                   <p className="mt-2 text-sm text-white/70">{product.blurb}</p>
                 </div>
-                <ul className="space-y-2 text-sm text-white/70">
-                  {product.highlights.map((item) => (
+                  <ul className="space-y-2 text-sm text-white/70">
+                    {highlights.map((item) => (
                     <li key={item} className="flex items-start gap-2">
                       <span className="mt-0.5 h-1.5 w-1.5 rounded-full bg-white/70" aria-hidden="true" />
                       <span>{item}</span>
@@ -490,17 +568,22 @@ function ShopPage({ onBackToHome }) {
                 <div className="mt-auto flex items-center justify-between">
                   <span className="text-base font-semibold text-white">{product.price}</span>
                   <a
-                    href={product.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white text-black text-sm"
+                    href={actionUrl || "#"}
+                    target={isDownload ? "_self" : "_blank"}
+                    rel={isDownload ? undefined : "noreferrer"}
+                    download={isDownload ? `${product.name}.zip` : undefined}
+                    className={classNames(
+                      "inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white text-black text-sm transition",
+                      disabled && "pointer-events-none opacity-60"
+                    )}
                   >
-                    View template <ArrowUpRight className="h-4 w-4" />
+                    {label} <Icon className="h-4 w-4" />
                   </a>
                 </div>
               </div>
             </article>
-          ))}
+            );
+          })}
         </div>
       </div>
     </section>
@@ -915,177 +998,659 @@ function Footer() {
 }
 
 /* -------------------------------------------------------
-   Admin Panel
+   Admin Modal
 ------------------------------------------------------- */
-function AdminPanel({ onCreated, user, onSignInWithGoogle, onSignOut }) {
-  const [busy, setBusy] = useState(false);
-  const [file, setFile] = useState(null);
-  const [meta, setMeta] = useState({
+function createInitialDropMeta() {
+  return {
     title: "",
     group: "SB19",
     tags: "Wallpaper,Portrait",
     filename: "",
     date: new Date().toISOString().slice(0, 10),
     tiktokUrl: "",
-  });
+  };
+}
 
-  const signIn = async () => {
+function createInitialShopMeta() {
+  return {
+    name: "",
+    blurb: "",
+    price: "",
+    highlights: "High-res PNG exports\nSource PSD/Canva file",
+    accent: "from-fuchsia-500 via-pink-500 to-amber-400",
+    delivery: "download",
+    externalUrl: "",
+    ctaLabel: "",
+    category: "Stickers",
+  };
+}
+
+function AdminModal({ open, onClose, user, onSignOut, onDropCreated, onShopCreated }) {
+  const [tab, setTab] = useState("drops");
+  const [authForm, setAuthForm] = useState({ email: "", password: "" });
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authStatus, setAuthStatus] = useState(null);
+
+  const [dropMeta, setDropMeta] = useState(() => createInitialDropMeta());
+  const [dropFile, setDropFile] = useState(null);
+  const [dropBusy, setDropBusy] = useState(false);
+  const [dropStatus, setDropStatus] = useState(null);
+
+  const [shopMeta, setShopMeta] = useState(() => createInitialShopMeta());
+  const [shopFile, setShopFile] = useState(null);
+  const [shopBusy, setShopBusy] = useState(false);
+  const [shopStatus, setShopStatus] = useState(null);
+
+  useEffect(() => {
+    if (!open) {
+      setTab("drops");
+      setAuthForm({ email: "", password: "" });
+      setAuthBusy(false);
+      setAuthStatus(null);
+      setDropMeta(createInitialDropMeta());
+      setDropFile(null);
+      setDropBusy(false);
+      setDropStatus(null);
+      setShopMeta(createInitialShopMeta());
+      setShopFile(null);
+      setShopBusy(false);
+      setShopStatus(null);
+    }
+  }, [open]);
+
+  const supabaseReady = !!supa;
+  const hasAdminEmail = !!ADMIN_EMAIL;
+  const authorized = isAdminUser(user);
+
+  const updateAuthField = (field) => (event) => {
+    const value = event.target.value;
+    setAuthForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleAdminSignIn = async (event) => {
+    event.preventDefault();
+    if (!supabaseReady) {
+      setAuthStatus({ tone: "error", message: "Add Supabase credentials to enable admin login." });
+      return;
+    }
     try {
-      if (onSignInWithGoogle) await onSignInWithGoogle();
-      else if (supa)
-        await supa.auth.signInWithOAuth({
-          provider: "google",
-          options: { redirectTo: window.location.href },
-        });
-      else throw new Error("Authentication is disabled. Add Supabase credentials first.");
+      setAuthBusy(true);
+      setAuthStatus(null);
+      const { error } = await supa.auth.signInWithPassword({
+        email: authForm.email,
+        password: authForm.password,
+      });
+      if (error) throw error;
+      setAuthStatus({
+        tone: "success",
+        message: "Signed in. If this account is authorized you'll see the upload tools below.",
+      });
     } catch (err) {
-      alert(err.message || "Unable to sign in right now.");
+      setAuthStatus({ tone: "error", message: err.message || "Unable to sign in." });
+    } finally {
+      setAuthBusy(false);
     }
   };
-  const signOut = async () => {
+
+  const handleAdminGoogle = async () => {
+    if (!supabaseReady) {
+      setAuthStatus({ tone: "error", message: "Add Supabase credentials to enable Google login." });
+      return;
+    }
     try {
+      setAuthBusy(true);
+      setAuthStatus(null);
+      await supa.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: window.location.href },
+      });
+    } catch (err) {
+      setAuthStatus({ tone: "error", message: err.message || "Unable to sign in with Google." });
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const handleAdminSignOut = async () => {
+    if (!supabaseReady) return;
+    try {
+      setAuthBusy(true);
+      setAuthStatus(null);
       if (onSignOut) await onSignOut();
-      else if (supa) await supa.auth.signOut();
-      else throw new Error("Authentication is disabled.");
+      else await supa.auth.signOut();
     } catch (err) {
-      alert(err.message || "Unable to sign out right now.");
+      setAuthStatus({ tone: "error", message: err.message || "Unable to sign out right now." });
+    } finally {
+      setAuthBusy(false);
     }
   };
-  const canUse = !!(user?.email && user.email === ALLOWED_EMAIL);
 
-  const upload = async (e) => {
-    e.preventDefault();
-    if (!supa) return alert("Missing Supabase env");
-    if (!canUse) return alert("Not authorized");
-    if (!file) return alert("Choose a file");
+  const handleDropUpload = async (event) => {
+    event.preventDefault();
+    if (!supabaseReady) {
+      setDropStatus({ tone: "error", message: "Add Supabase credentials to upload." });
+      return;
+    }
+    if (!authorized) {
+      setDropStatus({ tone: "error", message: "Sign in with the admin account to continue." });
+      return;
+    }
+    if (!dropFile) {
+      setDropStatus({ tone: "error", message: "Choose an image before uploading." });
+      return;
+    }
+
     try {
-      setBusy(true);
-      const path = `${Date.now()}-${file.name}`;
-      const { error: upErr } = await supa.storage
+      setDropBusy(true);
+      setDropStatus(null);
+      const path = `drops/${Date.now()}-${dropFile.name}`;
+      const { error: uploadError } = await supa.storage
         .from(SUPABASE_BUCKET)
-        .upload(path, file, { upsert: false });
-      if (upErr) throw upErr;
+        .upload(path, dropFile, { upsert: false });
+      if (uploadError) throw uploadError;
 
       const { data: pub } = supa.storage.from(SUPABASE_BUCKET).getPublicUrl(path);
-      const src = pub.publicUrl;
-      const tags = meta.tags.split(",").map((s) => s.trim()).filter(Boolean);
-      const filename = meta.filename || file.name;
+      const src = pub?.publicUrl;
+      if (!src) throw new Error("Could not determine public URL for the uploaded file.");
 
-      const { error: insErr, data } = await supa
+      const tags = dropMeta.tags
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean);
+      const filename = dropMeta.filename || dropFile.name;
+
+      const { data, error: insertError } = await supa
         .from("drops")
         .insert([
           {
-            title: meta.title,
-            group: meta.group,
+            title: dropMeta.title,
+            group: dropMeta.group,
             tags,
             src,
             filename,
-            date: meta.date,
-            tiktokUrl: meta.tiktokUrl,
+            date: dropMeta.date,
+            tiktokUrl: dropMeta.tiktokUrl,
           },
         ])
-        .select()
-        .single();
-      if (insErr) throw insErr;
+        .select();
 
-      setFile(null);
-      setMeta({ ...meta, title: "", tiktokUrl: "", filename: "" });
-      onCreated && onCreated(data);
-      alert("Uploaded");
+      if (insertError) throw insertError;
+
+      const created = Array.isArray(data) ? data[0] : null;
+      if (created && onDropCreated) onDropCreated(created);
+
+      setDropStatus({ tone: "success", message: "Gallery image uploaded." });
+      setDropFile(null);
+      setDropMeta((prev) => ({
+        ...createInitialDropMeta(),
+        tags: prev.tags,
+        group: prev.group,
+      }));
     } catch (err) {
-      alert(err.message);
+      setDropStatus({ tone: "error", message: err.message || "Upload failed." });
     } finally {
-      setBusy(false);
+      setDropBusy(false);
     }
   };
 
-  if (!supa) return null;
+  const handleShopUpload = async (event) => {
+    event.preventDefault();
+    if (!supabaseReady) {
+      setShopStatus({ tone: "error", message: "Add Supabase credentials to upload." });
+      return;
+    }
+    if (!authorized) {
+      setShopStatus({ tone: "error", message: "Sign in with the admin account to continue." });
+      return;
+    }
+    if (!shopFile) {
+      setShopStatus({ tone: "error", message: "Upload the digital asset or preview first." });
+      return;
+    }
+
+    try {
+      setShopBusy(true);
+      setShopStatus(null);
+
+      const path = `shop/${Date.now()}-${shopFile.name}`;
+      const { error: uploadError } = await supa.storage
+        .from(SUPABASE_BUCKET)
+        .upload(path, shopFile, { upsert: false });
+      if (uploadError) throw uploadError;
+
+      const { data: pub } = supa.storage.from(SUPABASE_BUCKET).getPublicUrl(path);
+      const downloadUrl = pub?.publicUrl;
+      if (!downloadUrl) throw new Error("Could not determine public URL for the uploaded file.");
+
+      const highlights = shopMeta.highlights
+        .split(/\r?\n/)
+        .map((value) => value.trim())
+        .filter(Boolean);
+      const delivery = shopMeta.delivery;
+      const ctaLabel = shopMeta.ctaLabel || (delivery === "download" ? "Download" : "View template");
+      const externalUrl = delivery === "external" ? shopMeta.externalUrl : "";
+
+      const payload = {
+        name: shopMeta.name,
+        blurb: shopMeta.blurb,
+        description: shopMeta.blurb,
+        price: shopMeta.price,
+        download_url: downloadUrl,
+        external_url: externalUrl || null,
+        highlights,
+        accent: shopMeta.accent,
+        delivery,
+        cta_label: ctaLabel,
+        category: shopMeta.category,
+      };
+
+      const { data, error: insertError } = await supa
+        .from("shop_items")
+        .insert([payload])
+        .select();
+
+      const createdRow = Array.isArray(data) && data.length ? data[0] : null;
+
+      const product = normalizeShopItem(
+        createdRow || {
+          id: `local-${Date.now()}`,
+          ...payload,
+          download_url: downloadUrl,
+        }
+      );
+
+      if (onShopCreated && product) onShopCreated(product);
+
+      setShopStatus({
+        tone: insertError ? "warning" : "success",
+        message: insertError
+          ? `Uploaded file but storing metadata failed: ${insertError.message}`
+          : "Shop item added.",
+      });
+      setShopFile(null);
+      setShopMeta((prev) => ({
+        ...createInitialShopMeta(),
+        accent: prev.accent,
+        delivery: prev.delivery,
+        category: prev.category,
+      }));
+    } catch (err) {
+      setShopStatus({ tone: "error", message: err.message || "Unable to add shop item." });
+    } finally {
+      setShopBusy(false);
+    }
+  };
+
+  if (!open) return null;
 
   return (
-    <div className="fixed bottom-4 left-4 right-4 sm:right-auto sm:w-[460px] rounded-2xl border border-white/10 bg-white/5 backdrop-blur p-4">
-      <div className="flex items-center justify-between mb-3">
-        <div className="text-white/80 text-sm font-medium">Admin Upload</div>
-        <div className="flex items-center gap-2">
-          {user ? (
-            <button
-              onClick={signOut}
-              className="text-xs px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-white inline-flex items-center gap-1"
-            >
-              <LogOut className="h-3.5 w-3.5" /> Sign out
-            </button>
-          ) : (
-            <button
-              onClick={signIn}
-              className="text-xs px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-white inline-flex items-center gap-1"
-            >
-              <LogIn className="h-3.5 w-3.5" /> Sign in
-            </button>
-          )}
-        </div>
-      </div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4">
+      <div className="relative w-full max-w-4xl rounded-3xl border border-white/10 bg-neutral-900/95 p-6 text-white shadow-xl backdrop-blur">
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute right-3 top-3 rounded-full p-2 text-white/60 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+          aria-label="Close admin dialog"
+        >
+          <X className="h-4 w-4" />
+        </button>
 
-      {!canUse ? (
-        <p className="text-xs text-white/60">
-          Sign in with the authorized Google account to upload.
-        </p>
-      ) : (
-        <form onSubmit={upload} className="space-y-2">
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(e) => setFile(e.target.files?.[0] || null)}
-            className="block w-full text-xs text-white/80"
-          />
-          <input
-            placeholder="Title"
-            value={meta.title}
-            onChange={(e) => setMeta({ ...meta, title: e.target.value })}
-            className="w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm text-white"
-          />
-          <div className="grid grid-cols-2 gap-2">
-            <select
-              value={meta.group}
-              onChange={(e) => setMeta({ ...meta, group: e.target.value })}
-              className="rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm text-white"
-            >
-              <option className="bg-black">SB19</option>
-              <option className="bg-black">BINI</option>
-              <option className="bg-black">PPop</option>
-              <option className="bg-black">Other</option>
-            </select>
-            <input
-              placeholder="YYYY-MM-DD"
-              value={meta.date}
-              onChange={(e) => setMeta({ ...meta, date: e.target.value })}
-              className="rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm text-white"
-            />
+        <div className="flex flex-col gap-2 pb-4 border-b border-white/10 mb-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-[0.3em] text-white/50">Admin workspace</p>
+              <h2 className="text-2xl font-semibold">Manage drops & shop templates</h2>
+            </div>
+            {authorized ? (
+              <button
+                type="button"
+                onClick={handleAdminSignOut}
+                disabled={authBusy}
+                className="inline-flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-sm text-white hover:bg-white/20 disabled:opacity-60"
+              >
+                <LogOut className="h-4 w-4" /> Sign out
+              </button>
+            ) : null}
           </div>
-          <input
-            placeholder="Tags (comma-separated)"
-            value={meta.tags}
-            onChange={(e) => setMeta({ ...meta, tags: e.target.value })}
-            className="w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm text-white"
-          />
-          <input
-            placeholder="Filename (optional)"
-            value={meta.filename}
-            onChange={(e) => setMeta({ ...meta, filename: e.target.value })}
-            className="w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm text-white"
-          />
-          <input
-            placeholder="TikTok URL (optional)"
-            value={meta.tiktokUrl}
-            onChange={(e) => setMeta({ ...meta, tiktokUrl: e.target.value })}
-            className="w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm text-white"
-          />
-          <button
-            disabled={busy || !file || !meta.title}
-            className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-white text-black text-sm disabled:opacity-50"
-          >
-            <Upload className="h-4 w-4" /> {busy ? "Uploading…" : "Upload"}
-          </button>
-        </form>
-      )}
+          <p className="text-sm text-white/70">
+            Upload new gallery drops or digital sticker templates for the in-app shop.
+          </p>
+        </div>
+
+        {!supabaseReady ? (
+          <div className="rounded-2xl border border-amber-400/60 bg-amber-500/10 px-4 py-3 text-amber-200 text-sm">
+            Add <code className="font-mono">VITE_SUPABASE_URL</code> and <code className="font-mono">VITE_SUPABASE_ANON</code> to enable admin tools.
+          </div>
+        ) : !hasAdminEmail ? (
+          <div className="rounded-2xl border border-amber-400/60 bg-amber-500/10 px-4 py-3 text-amber-200 text-sm">
+            Set <code className="font-mono">VITE_ADMIN_EMAIL</code> (or VITE_ALLOWED_EMAIL) with the authorized admin account email.
+          </div>
+        ) : !authorized ? (
+          <div className="grid gap-6 md:grid-cols-2">
+            <form onSubmit={handleAdminSignIn} className="rounded-2xl border border-white/10 bg-white/5 p-4 space-y-3">
+              <div>
+                <h3 className="text-lg font-semibold text-white">Admin login</h3>
+                <p className="text-sm text-white/60">Sign in with the email/password you configured in Supabase.</p>
+              </div>
+              <label className="block text-sm font-medium text-white/80">
+                Email
+                <input
+                  type="email"
+                  required
+                  value={authForm.email}
+                  onChange={updateAuthField("email")}
+                  className="mt-1 w-full rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm text-white focus:border-white/30 focus:outline-none"
+                />
+              </label>
+              <label className="block text-sm font-medium text-white/80">
+                Password
+                <input
+                  type="password"
+                  required
+                  value={authForm.password}
+                  onChange={updateAuthField("password")}
+                  className="mt-1 w-full rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm text-white focus:border-white/30 focus:outline-none"
+                />
+              </label>
+              <button
+                type="submit"
+                disabled={authBusy}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white text-black px-4 py-2 text-sm font-semibold disabled:opacity-60"
+              >
+                {authBusy ? "Signing in…" : "Sign in"}
+              </button>
+              {authStatus && (
+                <p
+                  className={classNames(
+                    "text-sm",
+                    authStatus.tone === "error"
+                      ? "text-rose-300"
+                      : authStatus.tone === "warning"
+                      ? "text-amber-300"
+                      : "text-emerald-300"
+                  )}
+                >
+                  {authStatus.message}
+                </p>
+              )}
+            </form>
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4 space-y-3">
+              <h3 className="text-lg font-semibold text-white">Need Google sign in?</h3>
+              <p className="text-sm text-white/60">
+                If your admin uses Google auth, use the button below. Make sure the Google account matches the configured admin
+                email.
+              </p>
+              <button
+                type="button"
+                onClick={handleAdminGoogle}
+                disabled={authBusy}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-white/10 px-4 py-2 text-sm text-white hover:bg-white/20 disabled:opacity-60"
+              >
+                <LogIn className="h-4 w-4" /> Sign in with Google
+              </button>
+              {authStatus && (
+                <p
+                  className={classNames(
+                    "text-sm",
+                    authStatus.tone === "error"
+                      ? "text-rose-300"
+                      : authStatus.tone === "warning"
+                      ? "text-amber-300"
+                      : "text-emerald-300"
+                  )}
+                >
+                  {authStatus.message}
+                </p>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            <div className="flex flex-wrap gap-2">
+              {[
+                { id: "drops", label: "Gallery uploads" },
+                { id: "shop", label: "Shop products" },
+              ].map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => setTab(option.id)}
+                  className={classNames(
+                    "rounded-xl px-4 py-2 text-sm font-medium transition",
+                    tab === option.id ? "bg-white text-black" : "bg-white/10 text-white hover:bg-white/20"
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+
+            {tab === "drops" ? (
+              <form onSubmit={handleDropUpload} className="space-y-3">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <label className="block text-sm font-medium text-white/80">
+                    Title
+                    <input
+                      value={dropMeta.title}
+                      onChange={(event) => setDropMeta({ ...dropMeta, title: event.target.value })}
+                      required
+                      className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-white/30 focus:outline-none"
+                    />
+                  </label>
+                  <label className="block text-sm font-medium text-white/80">
+                    Release date
+                    <input
+                      value={dropMeta.date}
+                      onChange={(event) => setDropMeta({ ...dropMeta, date: event.target.value })}
+                      required
+                      className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-white/30 focus:outline-none"
+                    />
+                  </label>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <label className="block text-sm font-medium text-white/80">
+                    Group
+                    <select
+                      value={dropMeta.group}
+                      onChange={(event) => setDropMeta({ ...dropMeta, group: event.target.value })}
+                      className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-white/30 focus:outline-none"
+                    >
+                      <option className="bg-black">SB19</option>
+                      <option className="bg-black">BINI</option>
+                      <option className="bg-black">PPop</option>
+                      <option className="bg-black">Other</option>
+                    </select>
+                  </label>
+                  <label className="block text-sm font-medium text-white/80">
+                    Tags
+                    <input
+                      value={dropMeta.tags}
+                      onChange={(event) => setDropMeta({ ...dropMeta, tags: event.target.value })}
+                      className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-white/30 focus:outline-none"
+                      placeholder="Wallpaper,Portrait"
+                    />
+                  </label>
+                </div>
+                <label className="block text-sm font-medium text-white/80">
+                  TikTok URL (optional)
+                  <input
+                    value={dropMeta.tiktokUrl}
+                    onChange={(event) => setDropMeta({ ...dropMeta, tiktokUrl: event.target.value })}
+                    className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-white/30 focus:outline-none"
+                    placeholder="https://www.tiktok.com/..."
+                  />
+                </label>
+                <label className="block text-sm font-medium text-white/80">
+                  Override filename (optional)
+                  <input
+                    value={dropMeta.filename}
+                    onChange={(event) => setDropMeta({ ...dropMeta, filename: event.target.value })}
+                    className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-white/30 focus:outline-none"
+                    placeholder="custom-name.png"
+                  />
+                </label>
+                <label className="block text-sm font-medium text-white/80">
+                  Upload image
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(event) => setDropFile(event.target.files?.[0] || null)}
+                    className="mt-1 block w-full text-sm text-white/80"
+                  />
+                </label>
+                <button
+                  type="submit"
+                  disabled={dropBusy || !dropMeta.title || !dropFile}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-white text-black px-4 py-2 text-sm font-semibold disabled:opacity-60"
+                >
+                  <Upload className="h-4 w-4" /> {dropBusy ? "Uploading…" : "Upload image"}
+                </button>
+                {dropStatus && (
+                  <p
+                    className={classNames(
+                      "text-sm",
+                      dropStatus.tone === "error"
+                        ? "text-rose-300"
+                        : dropStatus.tone === "warning"
+                        ? "text-amber-300"
+                        : "text-emerald-300"
+                    )}
+                  >
+                    {dropStatus.message}
+                  </p>
+                )}
+              </form>
+            ) : (
+              <form onSubmit={handleShopUpload} className="space-y-3">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <label className="block text-sm font-medium text-white/80">
+                    Product name
+                    <input
+                      value={shopMeta.name}
+                      onChange={(event) => setShopMeta({ ...shopMeta, name: event.target.value })}
+                      required
+                      className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-white/30 focus:outline-none"
+                    />
+                  </label>
+                  <label className="block text-sm font-medium text-white/80">
+                    Price
+                    <input
+                      value={shopMeta.price}
+                      onChange={(event) => setShopMeta({ ...shopMeta, price: event.target.value })}
+                      placeholder="$5.00"
+                      className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-white/30 focus:outline-none"
+                    />
+                  </label>
+                </div>
+                <label className="block text-sm font-medium text-white/80">
+                  Short description
+                  <textarea
+                    value={shopMeta.blurb}
+                    onChange={(event) => setShopMeta({ ...shopMeta, blurb: event.target.value })}
+                    rows={3}
+                    className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-white/30 focus:outline-none"
+                  />
+                </label>
+                <label className="block text-sm font-medium text-white/80">
+                  Highlights (one per line)
+                  <textarea
+                    value={shopMeta.highlights}
+                    onChange={(event) => setShopMeta({ ...shopMeta, highlights: event.target.value })}
+                    rows={4}
+                    className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-white/30 focus:outline-none"
+                  />
+                </label>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <label className="block text-sm font-medium text-white/80">
+                    Accent gradient utility classes
+                    <input
+                      value={shopMeta.accent}
+                      onChange={(event) => setShopMeta({ ...shopMeta, accent: event.target.value })}
+                      className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-white/30 focus:outline-none"
+                      placeholder="from-fuchsia-500 via-pink-500 to-amber-400"
+                    />
+                  </label>
+                  <label className="block text-sm font-medium text-white/80">
+                    Category label
+                    <input
+                      value={shopMeta.category}
+                      onChange={(event) => setShopMeta({ ...shopMeta, category: event.target.value })}
+                      className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-white/30 focus:outline-none"
+                      placeholder="Stickers"
+                    />
+                  </label>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <label className="block text-sm font-medium text-white/80">
+                    CTA label (optional)
+                    <input
+                      value={shopMeta.ctaLabel}
+                      onChange={(event) => setShopMeta({ ...shopMeta, ctaLabel: event.target.value })}
+                      className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-white/30 focus:outline-none"
+                      placeholder="Download"
+                    />
+                  </label>
+                  <label className="block text-sm font-medium text-white/80">
+                    Delivery method
+                    <select
+                      value={shopMeta.delivery}
+                      onChange={(event) => setShopMeta({ ...shopMeta, delivery: event.target.value })}
+                      className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-white/30 focus:outline-none"
+                    >
+                      <option value="download" className="bg-black">
+                        Direct download (uses uploaded file)
+                      </option>
+                      <option value="external" className="bg-black">
+                        External checkout link
+                      </option>
+                    </select>
+                  </label>
+                </div>
+                {shopMeta.delivery === "external" && (
+                  <label className="block text-sm font-medium text-white/80">
+                    External checkout URL
+                    <input
+                      value={shopMeta.externalUrl}
+                      onChange={(event) => setShopMeta({ ...shopMeta, externalUrl: event.target.value })}
+                      className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-white/30 focus:outline-none"
+                      placeholder="https://yourstore.com/product"
+                    />
+                  </label>
+                )}
+                <label className="block text-sm font-medium text-white/80">
+                  Upload template file or preview
+                  <input
+                    type="file"
+                    onChange={(event) => setShopFile(event.target.files?.[0] || null)}
+                    className="mt-1 block w-full text-sm text-white/80"
+                  />
+                </label>
+                <button
+                  type="submit"
+                  disabled={shopBusy || !shopMeta.name || !shopFile}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-white text-black px-4 py-2 text-sm font-semibold disabled:opacity-60"
+                >
+                  <Upload className="h-4 w-4" /> {shopBusy ? "Uploading…" : "Add to shop"}
+                </button>
+                {shopStatus && (
+                  <p
+                    className={classNames(
+                      "text-sm",
+                      shopStatus.tone === "error"
+                        ? "text-rose-300"
+                        : shopStatus.tone === "warning"
+                        ? "text-amber-300"
+                        : "text-emerald-300"
+                    )}
+                  >
+                    {shopStatus.message}
+                  </p>
+                )}
+              </form>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -1103,8 +1668,8 @@ export default function App() {
   const [view, setView] = useState("home");
   const [session, setSession] = useState(null);
   const [accountOpen, setAccountOpen] = useState(false);
-
-  const adminMode = useQueryParam("admin") === "1";
+  const [adminOpen, setAdminOpen] = useState(false);
+  const [shopItems, setShopItems] = useState(SHOP_PRODUCTS);
 
   useEffect(() => {
     if (!supa) return;
@@ -1123,14 +1688,39 @@ export default function App() {
   }, []);
 
   const user = session?.user ?? null;
+  const isAdmin = isAdminUser(user);
 
-  const signInWithGoogle = async () => {
-    if (!supa) throw new Error("Authentication is disabled. Add Supabase credentials first.");
-    await supa.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: window.location.href },
+  useEffect(() => {
+    if (!supa) return;
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supa
+        .from("shop_items")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (!cancelled && !error && Array.isArray(data)) {
+        const mapped = data.map(normalizeShopItem).filter(Boolean);
+        if (mapped.length) setShopItems(mapped);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleDropCreated = useCallback((rec) => {
+    setRemoteDrops((prev) => (prev && prev.length ? [rec, ...prev] : [rec]));
+  }, []);
+
+  const handleShopCreated = useCallback((item) => {
+    setShopItems((prev) => {
+      const next = prev ? [...prev] : [];
+      const existingIndex = next.findIndex((entry) => entry.id === item.id);
+      if (existingIndex >= 0) next.splice(existingIndex, 1);
+      next.unshift(item);
+      return next;
     });
-  };
+  }, []);
 
   const signOutUser = async () => {
     if (!supa) throw new Error("Authentication is disabled. Add Supabase credentials first.");
@@ -1199,9 +1789,11 @@ export default function App() {
         onNavigateHome={goHome}
         onNavigateShop={goShop}
         onOpenAccount={() => setAccountOpen(true)}
+        onOpenAdmin={() => setAdminOpen(true)}
         onSignOut={handleHeaderSignOut}
         activeView={view}
         user={user}
+        isAdmin={isAdmin}
       />
 
       <AuthModal
@@ -1209,6 +1801,15 @@ export default function App() {
         onClose={() => setAccountOpen(false)}
         user={user}
         onSignOut={signOutUser}
+      />
+
+      <AdminModal
+        open={adminOpen}
+        onClose={() => setAdminOpen(false)}
+        user={user}
+        onSignOut={signOutUser}
+        onDropCreated={handleDropCreated}
+        onShopCreated={handleShopCreated}
       />
 
       {view === "home" ? (
@@ -1245,21 +1846,10 @@ export default function App() {
             }}
             item={current}
           />
-
-          {adminMode && (
-            <AdminPanel
-              onCreated={(rec) =>
-                setRemoteDrops((prev) => (prev ? [rec, ...prev] : [rec]))
-              }
-              user={user}
-              onSignInWithGoogle={signInWithGoogle}
-              onSignOut={signOutUser}
-            />
-          )}
         </>
       ) : (
         <>
-          <ShopPage onBackToHome={goHome} />
+          <ShopPage onBackToHome={goHome} products={shopItems} />
           <Footer />
         </>
       )}
