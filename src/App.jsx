@@ -28,11 +28,6 @@ const supa =
   SUPABASE_URL && SUPABASE_ANON ? createClient(SUPABASE_URL, SUPABASE_ANON) : null;
 
 const GROUPS = ["All", "SB19", "BINI", "PPop", "Other"];
-const TAGS = [
-  "Ken","Stell","Pablo","Josh","Justin",
-  "Aiah","Maloi","Jhoanna","Gwen","Sheena","Mikha","Stacey",
-  "Ghibli","Anime","Watercolor","Chibi","Sticker","Keychain","Wallpaper","Portrait",
-];
 
 function classNames(...s) {
   return s.filter(Boolean).join(" ");
@@ -476,9 +471,7 @@ function ShopPage({ onBackToHome }) {
   );
 }
 
-function Filters({ query, setQuery, group, setGroup, activeTags, setActiveTags, sort, setSort }) {
-  const toggleTag = (t) =>
-    setActiveTags((curr) => (curr.includes(t) ? curr.filter((x) => x !== t) : [...curr, t]));
+function Filters({ query, setQuery, group, setGroup, sort, setSort }) {
   return (
     <div className="max-w-6xl mx-auto px-4 py-4">
       <div className="grid md:grid-cols-4 gap-3">
@@ -515,23 +508,6 @@ function Filters({ query, setQuery, group, setGroup, activeTags, setActiveTags, 
           </option>
         </select>
       </div>
-
-      <div className="mt-3 flex flex-wrap gap-2">
-        {TAGS.map((t) => (
-          <button
-            key={t}
-            onClick={() => toggleTag(t)}
-            className={classNames(
-              "text-xs px-3 py-1.5 rounded-full border",
-              activeTags.includes(t)
-                ? "bg-white text-black border-white"
-                : "bg-white/5 text-white border-white/10 hover:bg-white/10"
-            )}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
     </div>
   );
 }
@@ -543,7 +519,7 @@ function Gallery({ items, onOpen }) {
   if (!items.length) {
     return (
       <div className="max-w-6xl mx-auto px-4 py-16 text-center text-white/70">
-        <p className="mb-2">No results. Try removing filters or checking other tags.</p>
+        <p className="mb-2">No results. Try adjusting your filters.</p>
       </div>
     );
   }
@@ -867,7 +843,6 @@ function AdminPanel({ onCreated }) {
 export default function App() {
   const [query, setQuery] = useState("");
   const [group, setGroup] = useState("All");
-  const [activeTags, setActiveTags] = useState([]);
   const [sort, setSort] = useState("new");
   const [open, setOpen] = useState(false);
   const [current, setCurrent] = useState(null);
@@ -901,12 +876,10 @@ export default function App() {
         (i.title + " " + (i.tags || []).join(" ")).toLowerCase().includes(q)
       );
     }
-    if (activeTags.length)
-      list = list.filter((i) => activeTags.every((t) => (i.tags || []).includes(t)));
     if (sort === "new") list.sort((a, b) => new Date(b.date) - new Date(a.date));
     else if (sort === "az") list.sort((a, b) => a.title.localeCompare(b.title));
     return list;
-  }, [remoteDrops, query, group, activeTags, sort]);
+  }, [remoteDrops, query, group, sort]);
 
   useEffect(() => {
     if (view !== "home") {
@@ -945,8 +918,6 @@ export default function App() {
               setQuery={setQuery}
               group={group}
               setGroup={setGroup}
-              activeTags={activeTags}
-              setActiveTags={setActiveTags}
               sort={sort}
               setSort={setSort}
             />
