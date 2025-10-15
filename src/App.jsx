@@ -1,5 +1,5 @@
 // src/App.jsx
-import React, { useMemo, useState, useEffect, useRef } from "react";
+import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import {
   Download,
   Search,
@@ -36,6 +36,113 @@ const TAGS = [
 
 function classNames(...s) {
   return s.filter(Boolean).join(" ");
+}
+
+const SHOP_PRODUCTS = [
+  {
+    id: "sticker-pack",
+    name: "Fan Sticker Pack Vol. 01",
+    description:
+      "25 die-cut ready stickers celebrating SB19 and BINI biases in vibrant neon gradients.",
+    price: "$6.50",
+    includes: [
+      "25 transparent PNG stickers at 2000px",
+      "Printable 4x6 layout for home cutters",
+      "Commercial mini-run license (up to 200 prints)",
+    ],
+    accent: "from-fuchsia-500 via-pink-500 to-amber-400",
+    buyUrl: "https://aipopstudios.com/shop?template=stickers",
+  },
+  {
+    id: "creator-badges",
+    name: "Creator Badge Bundle",
+    description:
+      "Animated TikTok live badges and supporter shout-out frames built for fast customization.",
+    price: "$9.00",
+    includes: [
+      "12 animated badge templates (1080x1920)",
+      "Editable Canva + layered PSD files",
+      "5 colorway presets and typography guide",
+    ],
+    accent: "from-cyan-400 via-sky-500 to-purple-500",
+    buyUrl: "https://aipopstudios.com/shop?template=badges",
+  },
+  {
+    id: "highlight-kit",
+    name: "Story Highlight Kit",
+    description:
+      "A cohesive Instagram highlight set with matching wallpapers and gradient cover art.",
+    price: "$7.50",
+    includes: [
+      "18 highlight cover PNGs + editable Canva file",
+      "Six looping vertical story backgrounds",
+      "Bonus lock-screen wallpaper trio",
+    ],
+    accent: "from-emerald-400 via-lime-400 to-teal-500",
+    buyUrl: "https://aipopstudios.com/shop?template=highlights",
+  },
+];
+
+const SHOP_HIGHLIGHTS = [
+  {
+    title: "Instant downloads",
+    detail: "Get a download link right after checkout—no waiting for email attachments.",
+  },
+  {
+    title: "Editable source files",
+    detail: "Each kit ships with layered Canva or PSD assets so you can tweak colors and text.",
+  },
+  {
+    title: "Creator-friendly licensing",
+    detail: "Use the templates for personal projects or limited merch runs up to 200 pieces.",
+  },
+];
+
+function usePathname() {
+  const [path, setPath] = useState(() => {
+    if (typeof window === "undefined") return "/";
+    return window.location.pathname || "/";
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onPop = () => setPath(window.location.pathname || "/");
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
+  const navigate = useCallback((next, { replace = false, preserveSearch = false } = {}) => {
+    if (typeof window === "undefined" || !next) return;
+    const base = next.startsWith("/") ? next : `/${next}`;
+    const search = preserveSearch ? window.location.search : "";
+    const target = `${base}${search}`;
+    const method = replace ? "replaceState" : "pushState";
+    window.history[method]?.({}, "", target);
+    setPath(window.location.pathname || "/");
+  }, []);
+
+  return [path, navigate];
+}
+
+function ShopIcon({ className = "", ...props }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      {...props}
+    >
+      <path d="M5 9.5h14" />
+      <path d="M6.2 4.5h11.6l2 5H4.2l2-5Z" fill="currentColor" opacity="0.12" />
+      <path d="M6.5 9.5V18a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2V9.5" />
+      <path d="M10 14h4" />
+    </svg>
+  );
 }
 
 /* -------------------------------------------------------
@@ -215,12 +322,20 @@ function DownloadButton({ url, filename = "image.png", label = "Download" }) {
 /* -------------------------------------------------------
    UI: Header / Hero / Filters / Footer
 ------------------------------------------------------- */
-function Header() {
+function Header({ onHome, onShop, activePath }) {
   const [logoOk, setLogoOk] = useState(true);
+  const isShopActive = activePath.startsWith("/shop");
   return (
     <header className="sticky top-0 z-40 backdrop-blur bg-black/40 border-b border-white/10">
       <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
+        <a
+          href="/"
+          onClick={(e) => {
+            e.preventDefault();
+            onHome();
+          }}
+          className="flex items-center gap-3 text-white no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 rounded-2xl px-1 -mx-1"
+        >
           {logoOk ? (
             <img
               src={LOGO_SRC}
@@ -241,8 +356,26 @@ function Header() {
               AI-generated P-Pop wallpapers, stickers, and more
             </p>
           </div>
-        </div>
+        </a>
         <div className="flex items-center gap-2">
+          <a
+            href="/shop"
+            onClick={(e) => {
+              e.preventDefault();
+              onShop();
+            }}
+            className={classNames(
+              "inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-xl transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70",
+              isShopActive
+                ? "bg-white text-black shadow-[0_10px_30px_-12px_rgba(255,255,255,0.6)]"
+                : "bg-white/10 hover:bg-white/20 text-white"
+            )}
+            aria-current={isShopActive ? "page" : undefined}
+            title="Open the digital template shop"
+          >
+            <ShopIcon className="h-4 w-4" />
+            <span className="font-medium">Shop</span>
+          </a>
           <a
             href="https://aipopstudios.com/shop"
             target="_blank"
@@ -281,6 +414,116 @@ function Hero() {
           For Atin & Blooms 💖 Tap an artwork to open, long-press to save to
           Photos, or use the Download button below each image.
         </p>
+      </div>
+    </section>
+  );
+}
+
+function ShopPage({ onNavigateHome }) {
+  return (
+    <section className="relative overflow-hidden">
+      <div className="absolute inset-0 bg-[radial-gradient(80%_60%_at_20%_0%,rgba(34,211,238,0.12),transparent),radial-gradient(70%_55%_at_80%_10%,rgba(236,72,153,0.18),transparent)]" />
+      <div className="relative max-w-6xl mx-auto px-4 py-10 text-white">
+        <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+          <div className="max-w-2xl">
+            <p className="text-xs uppercase tracking-[0.3em] text-white/60 mb-3">
+              Digital Template Marketplace
+            </p>
+            <h2 className="text-3xl sm:text-5xl font-black tracking-tight">
+              Launch-ready TikTok & IG assets for your next drop
+            </h2>
+            <p className="mt-4 text-white/80 text-base sm:text-lg">
+              Mix-and-match sticker packs, animated supporter badges, and highlight kits made for creators.
+              Each template includes layered source files so you can customize colors, text, and export sizes in minutes.
+            </p>
+          </div>
+          <div className="flex flex-col items-start gap-3">
+            <button
+              type="button"
+              onClick={onNavigateHome}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-sm"
+            >
+              ← Back to gallery
+            </button>
+            <a
+              href="https://aipopstudios.com/shop"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white text-black font-semibold shadow-lg shadow-fuchsia-500/30"
+            >
+              Explore full store <ArrowUpRight className="h-4 w-4" />
+            </a>
+          </div>
+        </div>
+
+        <div className="mt-10 grid gap-4 sm:grid-cols-3">
+          {SHOP_HIGHLIGHTS.map((item) => (
+            <div
+              key={item.title}
+              className="rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur"
+            >
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-white/80">
+                {item.title}
+              </h3>
+              <p className="mt-2 text-sm text-white/70">{item.detail}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-12 grid gap-6 md:grid-cols-3">
+          {SHOP_PRODUCTS.map((product) => (
+            <article
+              key={product.id}
+              className="group relative overflow-hidden rounded-3xl border border-white/10 bg-neutral-900/60 backdrop-blur"
+            >
+              <div className={`h-40 bg-gradient-to-br ${product.accent}`} />
+              <div className="p-6">
+                <h3 className="text-lg font-semibold text-white">{product.name}</h3>
+                <p className="mt-2 text-sm text-white/70">{product.description}</p>
+                <ul className="mt-4 space-y-2 text-sm text-white/75">
+                  {product.includes.map((line) => (
+                    <li key={line} className="flex items-start gap-2">
+                      <span className="mt-0.5 inline-block h-1.5 w-1.5 rounded-full bg-white/60" />
+                      <span>{line}</span>
+                    </li>
+                  ))}
+                </ul>
+                <div className="mt-6 flex items-center justify-between">
+                  <span className="text-lg font-semibold text-white">{product.price}</span>
+                  <a
+                    href={product.buyUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-white text-black px-3 py-1.5 text-sm font-medium shadow-[0_12px_30px_-16px_rgba(255,255,255,0.9)] transition hover:-translate-y-0.5"
+                  >
+                    Buy template <ArrowUpRight className="h-4 w-4" />
+                  </a>
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function NotFound({ onNavigateHome }) {
+  return (
+    <section className="relative overflow-hidden">
+      <div className="absolute inset-0 bg-[radial-gradient(75%_55%_at_30%_0%,rgba(244,114,182,0.12),transparent),radial-gradient(60%_40%_at_80%_10%,rgba(59,130,246,0.14),transparent)]" />
+      <div className="relative max-w-6xl mx-auto px-4 py-20 text-center text-white">
+        <h2 className="text-3xl font-semibold">Page not found</h2>
+        <p className="mt-3 text-white/70 max-w-2xl mx-auto">
+          The page you were looking for has moved. Jump back to the download gallery to keep exploring the latest drops.
+        </p>
+        <button
+          type="button"
+          onClick={onNavigateHome}
+          className="mt-6 inline-flex items-center gap-2 rounded-xl bg-white text-black px-5 py-2 text-sm font-medium"
+        >
+          ← Back to gallery
+        </button>
       </div>
     </section>
   );
@@ -683,6 +926,13 @@ export default function App() {
   const [current, setCurrent] = useState(null);
   const [remoteDrops, setRemoteDrops] = useState([]);
 
+  const [path, navigate] = usePathname();
+  const goHome = useCallback(() => navigate("/", { preserveSearch: true }), [navigate]);
+  const goShop = useCallback(() => navigate("/shop"), [navigate]);
+
+  const isHome = path === "/" || path === "";
+  const isShop = path.startsWith("/shop");
+
   const adminMode = useQueryParam("admin") === "1";
 
   // Fetch drops from Supabase (safe: no-op if env missing)
@@ -717,6 +967,13 @@ export default function App() {
     return list;
   }, [remoteDrops, query, group, activeTags, sort]);
 
+  useEffect(() => {
+    if (!isHome) {
+      setOpen(false);
+      setCurrent(null);
+    }
+  }, [isHome]);
+
   return (
     <main className="min-h-screen bg-black text-white">
       {/* Background blobs */}
@@ -725,48 +982,61 @@ export default function App() {
         <div className="absolute top-20 right-0 h-80 w-80 rounded-full blur-3xl opacity-25 bg-gradient-to-br from-cyan-400 to-violet-500" />
       </div>
 
-      <Header />
-      <Hero />
+      <Header onHome={goHome} onShop={goShop} activePath={path} />
 
-      <section className="pt-2">
-        <div className="max-w-6xl mx-auto px-4 flex items-center gap-2 text-white/70 text-sm mb-2">
-          <SlidersHorizontal className="h-4 w-4" /> Filters
-        </div>
-        <Filters
-          query={query}
-          setQuery={setQuery}
-          group={group}
-          setGroup={setGroup}
-          activeTags={activeTags}
-          setActiveTags={setActiveTags}
-          sort={sort}
-          setSort={setSort}
-        />
-        <Gallery
-          items={filtered}
-          onOpen={(item) => {
-            setCurrent(item);
-            setOpen(true);
-          }}
-        />
-      </section>
+      {isHome ? (
+        <>
+          <Hero />
+          <section className="pt-2">
+            <div className="max-w-6xl mx-auto px-4 flex items-center gap-2 text-white/70 text-sm mb-2">
+              <SlidersHorizontal className="h-4 w-4" /> Filters
+            </div>
+            <Filters
+              query={query}
+              setQuery={setQuery}
+              group={group}
+              setGroup={setGroup}
+              activeTags={activeTags}
+              setActiveTags={setActiveTags}
+              sort={sort}
+              setSort={setSort}
+            />
+            <Gallery
+              items={filtered}
+              onOpen={(item) => {
+                setCurrent(item);
+                setOpen(true);
+              }}
+            />
+          </section>
+        </>
+      ) : isShop ? (
+        <ShopPage onNavigateHome={goHome} />
+      ) : (
+        <NotFound onNavigateHome={goHome} />
+      )}
 
       <Footer />
-      <Modal
-        open={open}
-        onClose={() => {
-          setOpen(false);
-          setCurrent(null);
-        }}
-        item={current}
-      />
 
-      {adminMode && (
-        <AdminPanel
-          onCreated={(rec) =>
-            setRemoteDrops((prev) => (prev ? [rec, ...prev] : [rec]))
-          }
-        />
+      {isHome && (
+        <>
+          <Modal
+            open={open}
+            onClose={() => {
+              setOpen(false);
+              setCurrent(null);
+            }}
+            item={current}
+          />
+
+          {adminMode && (
+            <AdminPanel
+              onCreated={(rec) =>
+                setRemoteDrops((prev) => (prev ? [rec, ...prev] : [rec]))
+              }
+            />
+          )}
+        </>
       )}
     </main>
   );
