@@ -10,6 +10,7 @@ import {
   LogIn,
   LogOut,
   Upload,
+  X,
 } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 
@@ -289,7 +290,14 @@ function DownloadButton({ url, filename = "image.png", label = "Download" }) {
 /* -------------------------------------------------------
    UI: Header / Hero / Filters / Footer
 ------------------------------------------------------- */
-function Header({ onNavigateHome, onNavigateShop, activeView }) {
+function Header({
+  onNavigateHome,
+  onNavigateShop,
+  onOpenAccount,
+  onSignOut,
+  activeView,
+  user,
+}) {
   const [logoOk, setLogoOk] = useState(true);
   const isShop = activeView === "shop";
   return (
@@ -353,6 +361,34 @@ function Header({ onNavigateHome, onNavigateShop, activeView }) {
           >
             Visit TikTok <ArrowUpRight className="h-4 w-4" />
           </a>
+          {user ? (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onOpenAccount}
+                className="hidden sm:inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white"
+              >
+                <span className="max-w-[140px] truncate">{user.email}</span>
+              </button>
+              <button
+                type="button"
+                onClick={onSignOut}
+                className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-xl bg-white text-black font-medium"
+              >
+                <LogOut className="h-4 w-4" />
+                Sign out
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={onOpenAccount}
+              className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white"
+            >
+              <LogIn className="h-4 w-4" />
+              Sign in
+            </button>
+          )}
         </div>
       </div>
     </header>
@@ -468,6 +504,223 @@ function ShopPage({ onBackToHome }) {
         </div>
       </div>
     </section>
+  );
+}
+
+function AuthModal({ open, onClose, user, onSignOut }) {
+  const [mode, setMode] = useState("signin");
+  const [form, setForm] = useState({ email: "", password: "", confirm: "" });
+  const [status, setStatus] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      setMode("signin");
+      setForm({ email: "", password: "", confirm: "" });
+      setStatus(null);
+      setLoading(false);
+    }
+  }, [open]);
+
+  const supabaseReady = Boolean(supa);
+
+  const updateField = (key) => (e) =>
+    setForm((prev) => ({ ...prev, [key]: e.target.value }));
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!supabaseReady) {
+      setStatus({
+        tone: "error",
+        message: "Authentication is disabled. Add Supabase credentials to enable sign in.",
+      });
+      return;
+    }
+
+    if (!form.email || !form.password) {
+      setStatus({ tone: "error", message: "Enter your email and password." });
+      return;
+    }
+
+    if (mode === "signup" && form.password !== form.confirm) {
+      setStatus({ tone: "error", message: "Passwords do not match." });
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setStatus(null);
+      if (mode === "signup") {
+        const { error } = await supa.auth.signUp({
+          email: form.email,
+          password: form.password,
+        });
+        if (error) throw error;
+        setStatus({
+          tone: "success",
+          message: "Check your email to confirm your account, then sign in.",
+        });
+        setMode("signin");
+        setForm((prev) => ({ ...prev, password: "", confirm: "" }));
+      } else {
+        const { error } = await supa.auth.signInWithPassword({
+          email: form.email,
+          password: form.password,
+        });
+        if (error) throw error;
+        setStatus({ tone: "success", message: "Signed in successfully." });
+        onClose?.();
+      }
+    } catch (err) {
+      setStatus({ tone: "error", message: err.message || "Something went wrong." });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    try {
+      setLoading(true);
+      if (onSignOut) await onSignOut();
+      else if (supa) await supa.auth.signOut();
+      onClose?.();
+    } catch (err) {
+      setStatus({ tone: "error", message: err.message || "Unable to sign out right now." });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4">
+      <div className="relative w-full max-w-md rounded-3xl border border-white/10 bg-neutral-900/90 p-6 text-white shadow-xl backdrop-blur">
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute right-3 top-3 rounded-full p-2 text-white/60 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+          aria-label="Close authentication dialog"
+        >
+          <X className="h-4 w-4" />
+        </button>
+
+        {user ? (
+          <div className="space-y-4 pt-2">
+            <div>
+              <p className="text-sm uppercase tracking-[0.3em] text-white/50">Account</p>
+              <h3 className="mt-1 text-2xl font-semibold">You're signed in</h3>
+            </div>
+            <div className="rounded-2xl bg-white/5 p-4 text-sm text-white/80">
+              <p className="font-medium text-white">{user.email}</p>
+              {user.user_metadata?.full_name && (
+                <p className="text-white/60">{user.user_metadata.full_name}</p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={handleSignOut}
+              disabled={loading}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white text-black px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              <LogOut className="h-4 w-4" /> Sign out
+            </button>
+            {status && (
+              <p
+                className={classNames(
+                  "text-sm",
+                  status.tone === "error" ? "text-rose-300" : "text-emerald-300"
+                )}
+              >
+                {status.message}
+              </p>
+            )}
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-5 pt-2">
+            <div>
+              <p className="text-sm uppercase tracking-[0.3em] text-white/50">
+                {mode === "signup" ? "Create account" : "Welcome back"}
+              </p>
+              <h3 className="mt-1 text-2xl font-semibold">
+                {mode === "signup" ? "Join AI Pop Studios" : "Sign in to continue"}
+              </h3>
+            </div>
+            {!supabaseReady && (
+              <div className="rounded-2xl border border-amber-400/60 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+                Add your Supabase keys to enable email sign up & login.
+              </div>
+            )}
+            <div className="space-y-3">
+              <label className="block text-sm font-medium text-white/80">
+                Email
+                <input
+                  type="email"
+                  required
+                  autoComplete="email"
+                  value={form.email}
+                  onChange={updateField("email")}
+                  className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/40 focus:border-white/30 focus:outline-none"
+                />
+              </label>
+              <label className="block text-sm font-medium text-white/80">
+                Password
+                <input
+                  type="password"
+                  required
+                  autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                  value={form.password}
+                  onChange={updateField("password")}
+                  className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/40 focus:border-white/30 focus:outline-none"
+                />
+              </label>
+              {mode === "signup" && (
+                <label className="block text-sm font-medium text-white/80">
+                  Confirm password
+                  <input
+                    type="password"
+                    required
+                    autoComplete="new-password"
+                    value={form.confirm}
+                    onChange={updateField("confirm")}
+                    className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/40 focus:border-white/30 focus:outline-none"
+                  />
+                </label>
+              )}
+            </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white text-black px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {mode === "signup" ? "Create account" : "Sign in"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMode((prev) => (prev === "signup" ? "signin" : "signup"));
+                setStatus(null);
+              }}
+              className="w-full text-center text-sm text-white/70 hover:text-white"
+            >
+              {mode === "signup"
+                ? "Already have an account? Sign in"
+                : "Need an account? Sign up"}
+            </button>
+            {status && (
+              <p
+                className={classNames(
+                  "text-sm",
+                  status.tone === "error" ? "text-rose-300" : "text-emerald-300"
+                )}
+              >
+                {status.message}
+              </p>
+            )}
+          </form>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -662,10 +915,9 @@ function Footer() {
 }
 
 /* -------------------------------------------------------
-   Admin Panel (unchanged logic, minor formatting)
+   Admin Panel
 ------------------------------------------------------- */
-function AdminPanel({ onCreated }) {
-  const [user, setUser] = useState(null);
+function AdminPanel({ onCreated, user, onSignInWithGoogle, onSignOut }) {
   const [busy, setBusy] = useState(false);
   const [file, setFile] = useState(null);
   const [meta, setMeta] = useState({
@@ -677,26 +929,27 @@ function AdminPanel({ onCreated }) {
     tiktokUrl: "",
   });
 
-  useEffect(() => {
-    if (!supa) return;
-    supa.auth.getUser().then(({ data }) => setUser(data?.user ?? null));
-    const { data: sub } = supa.auth.onAuthStateChange((_e, session) =>
-      setUser(session?.user ?? null)
-    );
-    return () => {
-      sub.subscription?.unsubscribe();
-    };
-  }, []);
-
   const signIn = async () => {
-    if (supa)
-      await supa.auth.signInWithOAuth({
-        provider: "google",
-        options: { redirectTo: window.location.href },
-      });
+    try {
+      if (onSignInWithGoogle) await onSignInWithGoogle();
+      else if (supa)
+        await supa.auth.signInWithOAuth({
+          provider: "google",
+          options: { redirectTo: window.location.href },
+        });
+      else throw new Error("Authentication is disabled. Add Supabase credentials first.");
+    } catch (err) {
+      alert(err.message || "Unable to sign in right now.");
+    }
   };
   const signOut = async () => {
-    if (supa) await supa.auth.signOut();
+    try {
+      if (onSignOut) await onSignOut();
+      else if (supa) await supa.auth.signOut();
+      else throw new Error("Authentication is disabled.");
+    } catch (err) {
+      alert(err.message || "Unable to sign out right now.");
+    }
   };
   const canUse = !!(user?.email && user.email === ALLOWED_EMAIL);
 
@@ -848,8 +1101,51 @@ export default function App() {
   const [current, setCurrent] = useState(null);
   const [remoteDrops, setRemoteDrops] = useState([]);
   const [view, setView] = useState("home");
+  const [session, setSession] = useState(null);
+  const [accountOpen, setAccountOpen] = useState(false);
 
   const adminMode = useQueryParam("admin") === "1";
+
+  useEffect(() => {
+    if (!supa) return;
+    let alive = true;
+    supa.auth.getSession().then(({ data }) => {
+      if (!alive) return;
+      setSession(data?.session ?? null);
+    });
+    const { data: listener } = supa.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession ?? null);
+    });
+    return () => {
+      alive = false;
+      listener.subscription?.unsubscribe();
+    };
+  }, []);
+
+  const user = session?.user ?? null;
+
+  const signInWithGoogle = async () => {
+    if (!supa) throw new Error("Authentication is disabled. Add Supabase credentials first.");
+    await supa.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: window.location.href },
+    });
+  };
+
+  const signOutUser = async () => {
+    if (!supa) throw new Error("Authentication is disabled. Add Supabase credentials first.");
+    const { error } = await supa.auth.signOut();
+    if (error) throw error;
+    setAccountOpen(false);
+  };
+
+  const handleHeaderSignOut = async () => {
+    try {
+      await signOutUser();
+    } catch (err) {
+      alert(err.message || "Unable to sign out right now.");
+    }
+  };
 
   // Fetch drops from Supabase (safe: no-op if env missing)
   useEffect(() => {
@@ -902,7 +1198,17 @@ export default function App() {
       <Header
         onNavigateHome={goHome}
         onNavigateShop={goShop}
+        onOpenAccount={() => setAccountOpen(true)}
+        onSignOut={handleHeaderSignOut}
         activeView={view}
+        user={user}
+      />
+
+      <AuthModal
+        open={accountOpen}
+        onClose={() => setAccountOpen(false)}
+        user={user}
+        onSignOut={signOutUser}
       />
 
       {view === "home" ? (
@@ -945,6 +1251,9 @@ export default function App() {
               onCreated={(rec) =>
                 setRemoteDrops((prev) => (prev ? [rec, ...prev] : [rec]))
               }
+              user={user}
+              onSignInWithGoogle={signInWithGoogle}
+              onSignOut={signOutUser}
             />
           )}
         </>
