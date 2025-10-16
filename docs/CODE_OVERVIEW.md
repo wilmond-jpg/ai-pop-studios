@@ -22,6 +22,9 @@
 ## Supabase configuration
 - Authentication, gallery uploads, and the digital shop all talk to the same Supabase project. Follow the [Supabase setup guide](./SUPABASE_SETUP.md) to collect the `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON`, and admin email credentials, and to provision the `drops`/`shop_items` tables plus the shared storage bucket.
 
+## Payments
+- The in-app checkout currently mocks GCash collection for demo purposes. When you are ready to process real payments, follow the [GCash payment integration guide](./GCASH_INTEGRATION.md) to provision API keys, secure serverless functions, and webhook handlers.
+
 ## Deployment
 - The project is configured for Vercel. If you encounter a `DEPLOYMENT_NOT_FOUND` error when visiting your domain, review the [Vercel deployment troubleshooting guide](./VERCEL_DEPLOYMENT.md) for steps to relink the domain to an active build.
 
