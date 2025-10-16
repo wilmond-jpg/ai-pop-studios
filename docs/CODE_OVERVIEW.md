@@ -18,3 +18,7 @@
 
 ## Analytics (`src/analytics.js`)
 - Lazily loads Google Analytics when a GA ID is provided in production, installs `gtag`, and emits SPA-friendly page view events on navigation changes.【F:src/analytics.js†L1-L38】
+
+## Supabase configuration
+- Authentication, gallery uploads, and the digital shop all talk to the same Supabase project. Follow the [Supabase setup guide](./SUPABASE_SETUP.md) to collect the `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON`, and admin email credentials, and to provision the `drops`/`shop_items` tables plus the shared storage bucket.
+
