@@ -36,6 +36,32 @@ function classNames(...s) {
   return s.filter(Boolean).join(" ");
 }
 
+const DEFAULT_CURRENCY = "PHP";
+const pesoFormatter = new Intl.NumberFormat("en-PH", {
+  style: "currency",
+  currency: DEFAULT_CURRENCY,
+});
+
+function formatCurrency(amount, currency = DEFAULT_CURRENCY) {
+  if (typeof amount !== "number" || Number.isNaN(amount)) return "";
+  try {
+    const locale = currency === "PHP" ? "en-PH" : undefined;
+    return new Intl.NumberFormat(locale, { style: "currency", currency }).format(amount);
+  } catch (err) {
+    console.warn("Unable to format currency", currency, err);
+    return pesoFormatter.format(amount);
+  }
+}
+
+function parseCurrencyAmount(value) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (!value) return 0;
+  if (typeof value !== "string") return 0;
+  const normalized = value.replace(/[^0-9.,-]/g, "").replace(/,/g, "");
+  const amount = Number.parseFloat(normalized);
+  return Number.isFinite(amount) ? amount : 0;
+}
+
 function isAdminUser(user) {
   if (!ADMIN_EMAIL) return false;
   const email = user?.email || "";
@@ -66,6 +92,10 @@ function ShopGlyph({ className = "", ...props }) {
 
 const SHOP_FEATURES = [
   {
+    title: "GCash payments",
+    description: "Check out locally with secure GCash transfers priced in Philippine pesos.",
+  },
+  {
     title: "Instant download",
     description: "Access your templates immediately after checkout—no email wait required.",
   },
@@ -84,7 +114,9 @@ const SHOP_PRODUCTS = [
     id: "sticker-pack",
     name: "Fan Sticker Pack Vol. 01",
     blurb: "25 neon die-cut stickers celebrating SB19 & BINI biases in high-res PNG format.",
-    price: "$6.50",
+    priceAmount: 349,
+    currency: DEFAULT_CURRENCY,
+    price: formatCurrency(349),
     url: "https://aipopstudios.com/shop?template=stickers",
     downloadUrl: "",
     highlights: [
@@ -100,7 +132,9 @@ const SHOP_PRODUCTS = [
     id: "creator-badges",
     name: "Creator Badge Bundle",
     blurb: "Animated live supporter badges and shout-out frames ready for TikTok overlays.",
-    price: "$9.00",
+    priceAmount: 499,
+    currency: DEFAULT_CURRENCY,
+    price: formatCurrency(499),
     url: "https://aipopstudios.com/shop?template=badges",
     downloadUrl: "",
     highlights: [
@@ -116,7 +150,9 @@ const SHOP_PRODUCTS = [
     id: "highlight-kit",
     name: "Story Highlight Kit",
     blurb: "Cohesive Instagram highlight covers with matching wallpapers and gradient art.",
-    price: "$7.50",
+    priceAmount: 429,
+    currency: DEFAULT_CURRENCY,
+    price: formatCurrency(429),
     url: "https://aipopstudios.com/shop?template=highlights",
     downloadUrl: "",
     highlights: [
@@ -150,12 +186,38 @@ function normalizeShopItem(item) {
   const externalUrl = item.external_url || item.url || "";
   const delivery = item.delivery || item.cta_type || (downloadUrl ? "download" : "external");
   const ctaLabel = item.cta_label || (delivery === "download" ? "Download" : "View template");
+  const rawCurrency =
+    item.currency || item.currency_code || item.price_currency || item.currencyCode || DEFAULT_CURRENCY;
+  const currency = `${rawCurrency || DEFAULT_CURRENCY}`.toUpperCase();
+  const rawAmount =
+    item.price_amount ??
+    item.priceAmount ??
+    (typeof item.price_in_cents === "number" ? item.price_in_cents / 100 : undefined) ??
+    (typeof item.amount_in_cents === "number" ? item.amount_in_cents / 100 : undefined);
+  const parsedAmount = parseCurrencyAmount(
+    rawAmount ??
+      item.price_php ??
+      item.price_peso ??
+      item.price ??
+      item.amount ??
+      item.priceLabel ??
+      item.price_label
+  );
+  const priceAmount =
+    typeof rawAmount === "number" && Number.isFinite(rawAmount) ? rawAmount : parsedAmount || 0;
+  const priceLabel =
+    item.price_label ||
+    item.priceLabel ||
+    (priceAmount ? formatCurrency(priceAmount, currency) : item.price || item.amount || "");
 
   return {
     id: item.id || item.slug || `shop-${Date.now()}`,
     name: item.name || item.title || "Untitled template",
     blurb: item.blurb || item.description || "",
-    price: item.price || item.amount || "",
+    price: priceLabel,
+    priceAmount,
+    currency,
+    priceLabel,
     url: delivery === "external" ? externalUrl || downloadUrl : downloadUrl || externalUrl,
     downloadUrl,
     highlights,
@@ -482,7 +544,14 @@ function Hero() {
   );
 }
 
-function ShopPage({ onBackToHome, products = SHOP_PRODUCTS }) {
+function ShopPage({
+  onBackToHome,
+  products = SHOP_PRODUCTS,
+  onAddToCart,
+  onOpenCart,
+  cartCount = 0,
+}) {
+  const cartLabel = cartCount > 0 ? `View cart (${cartCount})` : "View cart";
   return (
     <section className="relative overflow-hidden">
       <div className="absolute inset-0 bg-[radial-gradient(80%_60%_at_20%_0%,rgba(34,211,238,0.14),transparent),radial-gradient(70%_55%_at_80%_10%,rgba(236,72,153,0.18),transparent)]" />
@@ -506,6 +575,13 @@ function ShopPage({ onBackToHome, products = SHOP_PRODUCTS }) {
               className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-sm"
             >
               ← Back to gallery
+            </button>
+            <button
+              type="button"
+              onClick={onOpenCart}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white text-black text-sm shadow-lg"
+            >
+              {cartLabel}
             </button>
             <a
               href="https://aipopstudios.com/shop"
@@ -543,50 +619,312 @@ function ShopPage({ onBackToHome, products = SHOP_PRODUCTS }) {
             const highlights = Array.isArray(product.highlights)
               ? product.highlights
               : parseHighlights(product.highlights);
+            const priceLabel =
+              typeof product.priceAmount === "number" && product.priceAmount > 0
+                ? formatCurrency(product.priceAmount, product.currency || DEFAULT_CURRENCY)
+                : product.price || product.priceLabel || "";
             return (
-            <article
-              key={product.id}
-              className="relative rounded-3xl border border-white/10 bg-white/5 overflow-hidden flex flex-col"
-            >
-              <div
-                className={`h-32 bg-gradient-to-br ${product.accent} opacity-90`}
-                aria-hidden="true"
-              />
-              <div className="flex-1 p-5 flex flex-col gap-4">
-                <div>
-                  <h3 className="text-lg font-semibold text-white">{product.name}</h3>
-                  <p className="mt-2 text-sm text-white/70">{product.blurb}</p>
-                </div>
+              <article
+                key={product.id}
+                className="relative rounded-3xl border border-white/10 bg-white/5 overflow-hidden flex flex-col"
+              >
+                <div
+                  className={`h-32 bg-gradient-to-br ${product.accent} opacity-90`}
+                  aria-hidden="true"
+                />
+                <div className="flex-1 p-5 flex flex-col gap-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-white">{product.name}</h3>
+                    <p className="mt-2 text-sm text-white/70">{product.blurb}</p>
+                  </div>
                   <ul className="space-y-2 text-sm text-white/70">
                     {highlights.map((item) => (
-                    <li key={item} className="flex items-start gap-2">
-                      <span className="mt-0.5 h-1.5 w-1.5 rounded-full bg-white/70" aria-hidden="true" />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-                <div className="mt-auto flex items-center justify-between">
-                  <span className="text-base font-semibold text-white">{product.price}</span>
-                  <a
-                    href={actionUrl || "#"}
-                    target={isDownload ? "_self" : "_blank"}
-                    rel={isDownload ? undefined : "noreferrer"}
-                    download={isDownload ? `${product.name}.zip` : undefined}
-                    className={classNames(
-                      "inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white text-black text-sm transition",
-                      disabled && "pointer-events-none opacity-60"
-                    )}
-                  >
-                    {label} <Icon className="h-4 w-4" />
-                  </a>
+                      <li key={item} className="flex items-start gap-2">
+                        <span className="mt-0.5 h-1.5 w-1.5 rounded-full bg-white/70" aria-hidden="true" />
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="mt-auto flex flex-col gap-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-base font-semibold text-white">{priceLabel}</span>
+                      <button
+                        type="button"
+                        onClick={() => onAddToCart?.(product)}
+                        className="inline-flex items-center gap-2 rounded-xl bg-fuchsia-500/90 px-4 py-2 text-sm font-semibold text-white transition hover:bg-fuchsia-400"
+                      >
+                        Add to cart
+                      </button>
+                    </div>
+                    <a
+                      href={actionUrl || "#"}
+                      target={isDownload ? "_self" : "_blank"}
+                      rel={isDownload ? undefined : "noreferrer"}
+                      download={isDownload ? `${product.name}.zip` : undefined}
+                      className={classNames(
+                        "inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-white text-black text-sm transition",
+                        disabled && "pointer-events-none opacity-60"
+                      )}
+                    >
+                      {label} <Icon className="h-4 w-4" />
+                    </a>
+                  </div>
                 </div>
-              </div>
-            </article>
+              </article>
             );
           })}
         </div>
       </div>
     </section>
+  );
+}
+
+function CheckoutModal({
+  open,
+  cart,
+  onClose,
+  onUpdateQuantity,
+  onRemoveItem,
+  onCheckoutComplete,
+}) {
+  const [customer, setCustomer] = useState({ name: "", email: "", gcash: "", note: "" });
+  const [status, setStatus] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const isCartEmpty = !cart?.length;
+
+  useEffect(() => {
+    if (!open) {
+      setCustomer({ name: "", email: "", gcash: "", note: "" });
+      setStatus(null);
+      setSubmitting(false);
+    }
+  }, [open]);
+
+  const total = useMemo(() => {
+    if (!Array.isArray(cart)) return 0;
+    return cart.reduce((sum, entry) => {
+      const amount =
+        typeof entry.product?.priceAmount === "number" && entry.product.priceAmount > 0
+          ? entry.product.priceAmount
+          : parseCurrencyAmount(entry.product?.price || entry.product?.priceLabel || 0);
+      return sum + amount * (entry.quantity || 0);
+    }, 0);
+  }, [cart]);
+
+  const handleUpdate = (id, quantity) => {
+    if (!onUpdateQuantity) return;
+    if (quantity < 1) {
+      onRemoveItem?.(id);
+    } else {
+      onUpdateQuantity(id, quantity);
+    }
+  };
+
+  const handleSubmit = (event) => {
+    event.preventDefault();
+    if (isCartEmpty) {
+      setStatus({ tone: "error", message: "Add a template to your cart before checking out." });
+      return;
+    }
+    if (!customer.name || !customer.email || !customer.gcash) {
+      setStatus({
+        tone: "error",
+        message: "Please enter your name, email, and 11-digit GCash number.",
+      });
+      return;
+    }
+    if (!/^09\d{9}$/.test(customer.gcash)) {
+      setStatus({
+        tone: "error",
+        message: "GCash numbers should start with 09 and include 11 digits.",
+      });
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      setStatus({ tone: "info", message: "Creating your GCash payment request…" });
+      setTimeout(() => {
+        setStatus({
+          tone: "success",
+          message: `GCash request sent! Approve the ₱${total.toFixed(
+            2
+          )} payment on your device to receive your download links via email.`,
+        });
+        onCheckoutComplete?.({
+          customer,
+          total,
+          createdAt: new Date().toISOString(),
+        });
+        setSubmitting(false);
+      }, 800);
+    } catch (err) {
+      console.error(err);
+      setStatus({
+        tone: "error",
+        message: "We couldn't start the GCash payment right now. Please try again.",
+      });
+      setSubmitting(false);
+    }
+  };
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4">
+      <div className="relative w-full max-w-4xl rounded-3xl border border-white/10 bg-neutral-900/95 p-6 text-white shadow-xl backdrop-blur">
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute right-3 top-3 rounded-full p-2 text-white/60 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+          aria-label="Close checkout dialog"
+        >
+          <X className="h-4 w-4" />
+        </button>
+
+        <div className="mb-6 flex flex-col gap-2">
+          <p className="text-xs uppercase tracking-[0.3em] text-white/50">Checkout</p>
+          <h2 className="text-2xl font-semibold">Pay with GCash</h2>
+          <p className="text-sm text-white/70">
+            Confirm your cart and enter your GCash details to receive a payment request in Philippine pesos.
+          </p>
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-white">Cart summary</h3>
+                <span className="text-sm text-white/60">{cart?.length || 0} items</span>
+              </div>
+              <div className="mt-3 space-y-3">
+                {!cart?.length && (
+                  <p className="text-sm text-white/60">Your cart is empty. Add a sticker pack to begin checkout.</p>
+                )}
+                {cart?.map((entry) => {
+                  const unitAmount =
+                    typeof entry.product?.priceAmount === "number" && entry.product.priceAmount > 0
+                      ? entry.product.priceAmount
+                      : parseCurrencyAmount(entry.product?.price || entry.product?.priceLabel || 0);
+                  const priceLabel =
+                    unitAmount > 0
+                      ? formatCurrency(unitAmount, entry.product?.currency || DEFAULT_CURRENCY)
+                      : entry.product?.price || entry.product?.priceLabel || "";
+                  const quantity = entry.quantity || 0;
+                  const lineTotal = unitAmount * quantity;
+                  return (
+                    <div
+                      key={entry.product?.id}
+                      className="flex flex-col gap-2 rounded-xl border border-white/10 bg-black/40 p-3"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-semibold text-white">{entry.product?.name}</p>
+                          <p className="text-xs text-white/60">{priceLabel}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => onRemoveItem?.(entry.product?.id)}
+                          className="text-xs text-white/60 hover:text-white"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                      <div className="flex items-center justify-between gap-2 text-sm">
+                        <label className="flex items-center gap-2">
+                          <span className="text-white/60">Qty</span>
+                          <input
+                            type="number"
+                            min="1"
+                            value={entry.quantity}
+                            onChange={(event) => handleUpdate(entry.product?.id, Number(event.target.value) || 1)}
+                            className="w-16 rounded-lg border border-white/10 bg-white/10 px-2 py-1 text-white focus:border-white/30 focus:outline-none"
+                          />
+                        </label>
+                        <span className="font-semibold text-white">
+                          {formatCurrency(lineTotal, entry.product?.currency || DEFAULT_CURRENCY)}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="mt-4 flex items-center justify-between border-t border-white/10 pt-3">
+                <span className="text-sm text-white/60">Total</span>
+                <span className="text-lg font-semibold text-white">{formatCurrency(total)}</span>
+              </div>
+            </div>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4 space-y-3">
+              <label className="block text-sm font-medium text-white/80">
+                Full name
+                <input
+                  value={customer.name}
+                  onChange={(event) => setCustomer((prev) => ({ ...prev, name: event.target.value }))}
+                  className="mt-1 w-full rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm text-white focus:border-white/30 focus:outline-none"
+                  placeholder="Juan Dela Cruz"
+                  required
+                />
+              </label>
+              <label className="block text-sm font-medium text-white/80">
+                Email address
+                <input
+                  type="email"
+                  value={customer.email}
+                  onChange={(event) => setCustomer((prev) => ({ ...prev, email: event.target.value }))}
+                  className="mt-1 w-full rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm text-white focus:border-white/30 focus:outline-none"
+                  placeholder="you@example.com"
+                  required
+                />
+              </label>
+              <label className="block text-sm font-medium text-white/80">
+                GCash number
+                <input
+                  value={customer.gcash}
+                  onChange={(event) => setCustomer((prev) => ({ ...prev, gcash: event.target.value }))}
+                  className="mt-1 w-full rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm text-white focus:border-white/30 focus:outline-none"
+                  placeholder="09XXXXXXXXX"
+                  required
+                />
+              </label>
+              <label className="block text-sm font-medium text-white/80">
+                Order notes (optional)
+                <textarea
+                  value={customer.note}
+                  onChange={(event) => setCustomer((prev) => ({ ...prev, note: event.target.value }))}
+                  className="mt-1 w-full rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm text-white focus:border-white/30 focus:outline-none"
+                  rows={3}
+                  placeholder="Share customization requests or delivery notes"
+                />
+              </label>
+            </div>
+            <button
+              type="submit"
+              disabled={submitting || isCartEmpty}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-black transition hover:bg-emerald-300 disabled:opacity-60"
+            >
+              {submitting ? "Processing GCash payment…" : `Pay ${formatCurrency(total)}`}
+            </button>
+            {status && (
+              <p
+                className={classNames(
+                  "text-sm",
+                  status.tone === "error"
+                    ? "text-rose-300"
+                    : status.tone === "success"
+                    ? "text-emerald-300"
+                    : "text-white/70"
+                )}
+              >
+                {status.message}
+              </p>
+            )}
+          </form>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1670,6 +2008,8 @@ export default function App() {
   const [accountOpen, setAccountOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
   const [shopItems, setShopItems] = useState(SHOP_PRODUCTS);
+  const [cart, setCart] = useState([]);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
 
   useEffect(() => {
     if (!supa) return;
@@ -1722,6 +2062,42 @@ export default function App() {
     });
   }, []);
 
+  const handleAddToCart = useCallback((product) => {
+    if (!product) return;
+    setCart((prev) => {
+      const next = Array.isArray(prev) ? [...prev] : [];
+      const index = next.findIndex((entry) => entry.product?.id === product.id);
+      if (index >= 0) {
+        const existing = next[index];
+        next[index] = { ...existing, quantity: (existing.quantity || 0) + 1 };
+      } else {
+        next.push({ product, quantity: 1 });
+      }
+      return next;
+    });
+    setCheckoutOpen(true);
+  }, []);
+
+  const handleUpdateCartQuantity = useCallback((id, quantity) => {
+    setCart((prev) => {
+      if (!Array.isArray(prev)) return prev;
+      return prev.map((entry) =>
+        entry.product?.id === id ? { ...entry, quantity: Math.max(1, quantity || 1) } : entry
+      );
+    });
+  }, []);
+
+  const handleRemoveCartItem = useCallback((id) => {
+    setCart((prev) => {
+      if (!Array.isArray(prev)) return prev;
+      return prev.filter((entry) => entry.product?.id !== id);
+    });
+  }, []);
+
+  const handleCheckoutComplete = useCallback(() => {
+    setCart([]);
+  }, []);
+
   const signOutUser = async () => {
     if (!supa) throw new Error("Authentication is disabled. Add Supabase credentials first.");
     const { error } = await supa.auth.signOut();
@@ -1772,10 +2148,17 @@ export default function App() {
       setOpen(false);
       setCurrent(null);
     }
+    if (view !== "shop") {
+      setCheckoutOpen(false);
+    }
   }, [view]);
 
   const goHome = () => setView("home");
   const goShop = () => setView("shop");
+  const cartCount = useMemo(
+    () => (Array.isArray(cart) ? cart.reduce((sum, entry) => sum + (entry.quantity || 0), 0) : 0),
+    [cart]
+  );
 
   return (
     <main className="min-h-screen bg-black text-white">
@@ -1810,6 +2193,15 @@ export default function App() {
         onSignOut={signOutUser}
         onDropCreated={handleDropCreated}
         onShopCreated={handleShopCreated}
+      />
+
+      <CheckoutModal
+        open={checkoutOpen}
+        cart={cart}
+        onClose={() => setCheckoutOpen(false)}
+        onUpdateQuantity={handleUpdateCartQuantity}
+        onRemoveItem={handleRemoveCartItem}
+        onCheckoutComplete={handleCheckoutComplete}
       />
 
       {view === "home" ? (
@@ -1849,7 +2241,13 @@ export default function App() {
         </>
       ) : (
         <>
-          <ShopPage onBackToHome={goHome} products={shopItems} />
+          <ShopPage
+            onBackToHome={goHome}
+            products={shopItems}
+            onAddToCart={handleAddToCart}
+            onOpenCart={() => setCheckoutOpen(true)}
+            cartCount={cartCount}
+          />
           <Footer />
         </>
       )}
