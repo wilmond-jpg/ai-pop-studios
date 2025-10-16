@@ -1266,9 +1266,9 @@ function Modal({ open, onClose, item }) {
   return (
     <div className="fixed inset-0 z-50" aria-modal="true" role="dialog">
       <div className="absolute inset-0 bg-black/70" onClick={onClose} />
-      <div className="absolute inset-0 flex items-center justify-center p-4">
-        <div className="relative max-w-[92vw] w-[720px] rounded-3xl overflow-hidden border border-white/10 bg-neutral-900">
-          <div className="flex items-center justify-between px-3 py-2 border-b border-white/10 bg-gradient-to-b from-black/70 to-black/20 sticky top-0 z-10">
+      <div className="absolute inset-0 flex items-center justify-center p-4 sm:p-6">
+        <div className="relative w-full max-w-3xl max-h-[85vh] rounded-3xl border border-white/10 bg-neutral-900 shadow-2xl flex flex-col overflow-hidden">
+          <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-white/10 bg-gradient-to-b from-black/70 to-black/20">
             <button
               ref={closeBtnRef}
               onClick={onClose}
@@ -1285,19 +1285,19 @@ function Modal({ open, onClose, item }) {
             </button>
           </div>
 
-          <div className="aspect-[9/16] bg-black relative">
+          <div className="flex-1 min-h-0 bg-black/80 flex items-center justify-center p-4 overflow-auto">
             <ProgressiveImg
               src={item.src}
               alt={item.title}
-              className="w-full h-full object-contain"
+              className="max-h-full max-w-full w-auto h-auto object-contain"
             />
           </div>
 
-          <div className="px-4 py-3 border-t border-white/10 bg-black/30 sticky bottom-0 z-10 flex flex-wrap gap-2 items-center justify-between">
+          <div className="px-4 py-3 border-t border-white/10 bg-black/30 flex flex-wrap gap-2 items-center justify-between">
             <div className="text-white/80 text-sm font-medium line-clamp-1 pr-2">
               {item.title}
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2 justify-end">
               <DownloadButton url={item.src} filename={fileName} label="Download" />
               {item.tiktokUrl && (
                 <a
