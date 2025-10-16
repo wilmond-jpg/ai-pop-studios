@@ -10,7 +10,7 @@
 - Provides top-level layout elements:
   - `Header` with dynamic logo fallback and TikTok CTA.【F:src/App.jsx†L239-L286】
   - `Hero` section describing the gallery and mobile-friendly guidance.【F:src/App.jsx†L288-L312】
-  - `Filters` allowing search, group selection, tag toggles, and sort order adjustments.【F:src/App.jsx†L314-L386】
+  - `Filters` allowing search, group selection, and sort order adjustments (tag chips were removed for a simplified UI).【F:src/App.jsx†L314-L386】
   - `Footer` summarizing usage restrictions and attribution.【F:src/App.jsx†L440-L463】
 - Renders a `Gallery` grid of Supabase-backed image entries and a modal detail view with download actions and TikTok links.【F:src/App.jsx†L388-L438】
 - Includes an optional `AdminPanel` for authenticated Supabase uploads, handling Google OAuth, file uploads, metadata entry, and insertion into the `drops` table.【F:src/App.jsx†L465-L639】
@@ -21,4 +21,7 @@
 
 ## Supabase configuration
 - Authentication, gallery uploads, and the digital shop all talk to the same Supabase project. Follow the [Supabase setup guide](./SUPABASE_SETUP.md) to collect the `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON`, and admin email credentials, and to provision the `drops`/`shop_items` tables plus the shared storage bucket.
+
+## Deployment
+- The project is configured for Vercel. If you encounter a `DEPLOYMENT_NOT_FOUND` error when visiting your domain, review the [Vercel deployment troubleshooting guide](./VERCEL_DEPLOYMENT.md) for steps to relink the domain to an active build.
 
